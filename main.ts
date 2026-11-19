@@ -1,26 +1,36 @@
-// Vice Coast Cover Studio — the entry program (Node 22, standard library only).
-// It hands the app in: copies the app's static files and the screenshots this
-// session took from beside this file into the output directory, then writes the
-// dossier the judge reads with the vendored make.fun library. The grader runs
-// this twice and both runs must write identical bytes, so there is no clock,
-// no randomness and no network here — just copies and one deterministic build.
+// Vice Coast Cover Studio v2 — the hand-in program (Node 22, stdlib only).
 //
-// Run it locally with:
+// It carries the finished app to the grader: app/ and screenshots/ are copied
+// from beside this file into the output directory, and dossier.json is written
+// there with the vendored make.fun library. The program runs twice and both
+// runs must produce identical bytes, so nothing here reads a clock, rolls
+// dice, or touches the network — only copies plus one deterministic build.
+//
+// Why the output directory is emptied the way it is: the grader runs this
+// program as uid 65534 against an /output it owns but whose parent it cannot
+// write. Deleting /output itself would fail with EACCES and kill the whole
+// grade (that is exactly what v1 did). So the directory itself is never
+// removed — only the entries inside it are cleared, then it is created if
+// it is missing. A stale app/, screenshots/ or dossier.json can never leak
+// from one run into the next, and the run still exits 0 as nobody.
+//
+// Local check:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-// Where the entry lives, and where the grader wants the handed-in files.
-const repoRoot = dirname(fileURLToPath(import.meta.url));
-const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// The entry lives here; the grader's output directory is /output, or
+// MAKEFUN_OUTPUT_DIR when set (local runs and the nobody test use that).
+const here = dirname(fileURLToPath(import.meta.url));
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// The dossier caps from the competition's gate (reference/gate.json): the
-// text budget shapes the bytes; the rest refuse an entry the scorer would
-// refuse, so the program checks them up front instead of handing in junk.
-const DOSSIER_LIMITS = {
+// Gate caps from the competition (reference/gate.json): the text budget
+// shapes the dossier; the rest refuse an entry the scorer would refuse, so
+// they are checked up front instead of handing in junk.
+const CAPS = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   app_max_files: 993,
@@ -28,20 +38,29 @@ const DOSSIER_LIMITS = {
   app_path_max_bytes: 1000,
 };
 
-function handIn(sourceDir, targetDir) {
-  if (!existsSync(sourceDir)) return;
-  cpSync(sourceDir, targetDir, { recursive: true });
+// The names main.ts itself manages inside the output directory. Anything
+// else in there is left alone — it is not ours to delete.
+const MANAGED = ['app', 'screenshots', 'dossier.json'];
+
+// Clear only the entries this program manages, never the directory itself.
+function emptyManagedEntries(dir) {
+  mkdirSync(dir, { recursive: true });
+  for (const name of readdirSync(dir)) {
+    if (MANAGED.includes(name)) {
+      rmSync(join(dir, name), { recursive: true, force: true });
+    }
+  }
 }
 
-function main() {
-  // Start clean so a stale file from an earlier run can never leak in.
-  rmSync(outputDir, { recursive: true, force: true });
-  mkdirSync(outputDir, { recursive: true });
-
-  handIn(join(repoRoot, 'app'), join(outputDir, 'app'));
-  handIn(join(repoRoot, 'screenshots'), join(outputDir, 'screenshots'));
-
-  writeFileSync(join(outputDir, 'dossier.json'), buildDossier(outputDir, DOSSIER_LIMITS));
+function copyIfPresent(from, to) {
+  if (existsSync(from)) cpSync(from, to, { recursive: true });
 }
 
-main();
+function handIn() {
+  emptyManagedEntries(outDir);
+  copyIfPresent(join(here, 'app'), join(outDir, 'app'));
+  copyIfPresent(join(here, 'screenshots'), join(outDir, 'screenshots'));
+  writeFileSync(join(outDir, 'dossier.json'), buildDossier(outDir, CAPS));
+}
+
+handIn();

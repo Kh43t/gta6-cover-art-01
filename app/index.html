@@ -9,7 +9,7 @@
 </head>
 <body>
 <div class="shell">
-  <header class="topbar">
+  <header class="masthead">
     <div class="brand">
       <span class="brand-mark">★</span>
       <div>
@@ -17,13 +17,18 @@
         <p>Turn any photo into multi-panel cover art — offline, in your browser.</p>
       </div>
     </div>
-    <div class="top-actions">
-      <button id="undo" type="button" title="Undo (Ctrl+Z)">↩ Undo</button>
-      <button id="redo" type="button" title="Redo (Ctrl+Y)">↪ Redo</button>
-      <button id="randomize" type="button" title="Shuffle layout, grade and lettering">🎲 Surprise me</button>
+    <div class="masthead-actions">
+      <button id="undoBtn" type="button" title="Undo (Ctrl+Z)">↩ Undo</button>
+      <button id="redoBtn" type="button" title="Redo (Ctrl+Y)">↪ Redo</button>
+      <button id="surpriseBtn" type="button" title="Shuffle layout, grade and lettering">🎲 Surprise me</button>
     </div>
   </header>
 
+  <div class="toolbar" role="group" aria-label="One-click looks">
+    <span class="toolbar-label">Looks</span>
+    <div id="looksBar" class="chip-row"></div>
+    <span class="toolbar-note">One tap, a finished cover.</span>
+  </div>
   <div class="toolbar" role="group" aria-label="Layout">
     <span class="toolbar-label">Layout</span>
     <div id="layoutBar" class="chip-row"></div>
@@ -31,17 +36,17 @@
   <div class="toolbar" role="group" aria-label="Colour grade">
     <span class="toolbar-label">Grade</span>
     <div id="gradeBar" class="chip-row"></div>
-    <label class="slider-inline">Strength <input id="gradeStrength" type="range" min="0" max="1" step="0.05" value="0.8"> <span id="gradeVal">80%</span></label>
+    <label class="slider-inline">Strength <input id="gradeStrength" type="range" min="0" max="1" step="0.05" value="0.45"> <span id="gradeLabel">45%</span></label>
   </div>
-  <div class="toolbar" role="group" aria-label="Export size">
+  <div class="toolbar" role="group" aria-label="Export size and lettering">
     <span class="toolbar-label">Size</span>
     <div id="sizeBar" class="chip-row"></div>
     <span class="toolbar-label">Lettering</span>
-    <div id="titleStyleBar" class="chip-row"></div>
+    <div id="letteringBar" class="chip-row"></div>
   </div>
 
-  <main class="workspace">
-    <aside class="panel controls">
+  <main class="board">
+    <aside class="side">
       <section>
         <h2>1 · Photos</h2>
         <p class="hint">Your photos never leave this machine. Click a photo to fill the selected panel.</p>
@@ -51,32 +56,34 @@
         <div id="photoStrip" class="strip"></div>
         <div class="row">
           <button id="fillAll" type="button">One photo, all panels</button>
-          <button id="shuffle" type="button">Shuffle crops</button>
+          <button id="shufflePhotos" type="button">Shuffle crops</button>
         </div>
       </section>
 
       <section>
         <h2>2 · Words</h2>
-        <label>Title <input id="titleInput" type="text" maxlength="24" value="Sunset Heist"></label>
-        <label>Subtitle <input id="subtitleInput" type="text" maxlength="40" value="Vice Coast Stories"></label>
-        <label>Badge <input id="badgeInput" type="text" maxlength="16" value="VICE COAST"></label>
-        <label>Heat <input id="heatInput" type="range" min="1" max="5" step="1" value="4"> <span id="heatVal">★★★★☆</span></label>
+        <label>Title <input id="titleText" type="text" maxlength="24" value="Sunset Heist"></label>
+        <label>Tagline <input id="taglineText" type="text" maxlength="40" value="Vice Coast Stories"></label>
+        <label>Kicker <input id="kickerText" type="text" maxlength="16" value="VICE COAST"></label>
+        <label>Title size <input id="titleScale" type="range" min="0.6" max="1.4" step="0.05" value="1"> <span id="titleScaleLabel">100%</span></label>
+        <label>Heat <input id="heatRange" type="range" min="1" max="5" step="1" value="4"> <span id="heatLabel">★★★★☆</span></label>
       </section>
 
       <section>
         <h2>3 · Selected panel</h2>
-        <p class="hint" id="panelLabel">Panel 1</p>
-        <label>Zoom <input id="zoom" type="range" min="1" max="3" step="0.05" value="1"> <span id="zoomVal">100%</span></label>
-        <label>Move left–right <input id="panX" type="range" min="-1" max="1" step="0.05" value="0"></label>
-        <label>Move up–down <input id="panY" type="range" min="-1" max="1" step="0.05" value="0"></label>
-        <button id="resetPanel" type="button">Reset this panel</button>
+        <p class="hint" id="cellLabel">Panel 1</p>
+        <label>Zoom <input id="zoomRange" type="range" min="1" max="3" step="0.05" value="1"> <span id="zoomLabel">100%</span></label>
+        <label>Move left–right <input id="panXRange" type="range" min="-1" max="1" step="0.05" value="0"></label>
+        <label>Move up–down <input id="panYRange" type="range" min="-1" max="1" step="0.05" value="0"></label>
+        <button id="resetCell" type="button">Reset this panel</button>
         <p class="hint">Tip: click a panel in the preview, drag it to reframe, scroll to zoom.</p>
       </section>
 
       <section>
         <h2>4 · Finish</h2>
-        <label class="check"><input id="grainToggle" type="checkbox" checked> Film grain</label>
-        <label class="check"><input id="vignetteToggle" type="checkbox" checked> Vignette</label>
+        <label class="check"><input id="grainCheck" type="checkbox" checked> Film grain</label>
+        <label class="check"><input id="vignetteCheck" type="checkbox" checked> Vignette</label>
+        <label class="check"><input id="stickerCheck" type="checkbox" checked> Collector's sticker</label>
         <div class="export-row">
           <button id="exportOne" type="button" class="primary">Export PNG</button>
           <button id="exportAll" type="button" class="primary alt">Export all 3 sizes</button>
@@ -85,9 +92,9 @@
       </section>
     </aside>
 
-    <section class="stage">
-      <canvas id="preview" width="640" height="640" aria-label="Live cover preview"></canvas>
-      <p class="stage-hint">Live preview — what you see is the PNG you get.</p>
+    <section class="canvas-wrap">
+      <canvas id="preview" width="640" height="360" aria-label="Live cover preview"></canvas>
+      <p class="canvas-hint">Live preview — what you see is the PNG you get.</p>
     </section>
   </main>
 

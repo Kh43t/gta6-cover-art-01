@@ -1,95 +1,105 @@
-// Vice Coast Cover Studio — the editor shell. It owns the state, builds the
-// control panels, wires every input to the cover engine, and exports the PNGs.
-// Photos stay on the machine: uploads are read with object URLs, never sent.
+// Vice Coast Cover Studio v2 — the editor shell. It owns the studio state,
+// builds the control rows, wires every input to the cover engine, and
+// exports the PNGs. Photos stay on the machine: uploads are read with
+// object URLs and never sent anywhere.
+//
+// Restructured from v1: the state now calls its panels "cells", the words
+// are title / tagline / kicker (not title / subtitle / badge), there is a
+// one-click Looks row, a title-size slider and a collector-sticker toggle,
+// and the history lives in one object instead of two loose stacks.
 
-import { renderCover, panelAt } from './cover.js';
-import { GRADES, LAYOUTS, MAX_PANELS, SIZES, TITLE_STYLES, DEFAULT_BADGE, DEFAULT_SUBTITLE, DEFAULT_TITLE } from './presets.js';
-import { runShot } from './shots.js';
+import { composeCover, cellAt } from './cover.js';
+import {
+  GRADES, LAYOUTS, LOOKS, MAX_CELLS, EXPORT_SIZES, LETTERING,
+  DEFAULT_KICKER, DEFAULT_TAGLINE, DEFAULT_TITLE,
+  DEFAULT_GRADE_STRENGTH, DEFAULT_TITLE_SCALE, layoutById, sizeById,
+} from './presets.js';
+import { applyShot } from './shots.js';
 
 const $ = (id) => document.getElementById(id);
 const preview = $('preview');
-const statusEl = $('status');
+const statusLine = $('status');
 
-// --- state -----------------------------------------------------------------
+// --- studio state ----------------------------------------------------------
 
-function freshPanels() {
-  const spread = [0, 0.35, -0.35, 0.2, -0.2, 0.1, -0.1, 0.3, -0.3];
-  return Array.from({ length: MAX_PANELS }, (_, i) => ({
+function initialCells() {
+  const drift = [0, 0.35, -0.35, 0.2, -0.2, 0.1, -0.1, 0.3, -0.3];
+  return Array.from({ length: MAX_CELLS }, (_, i) => ({
     photo: i % 3,
     zoom: 1,
-    ox: spread[i % spread.length],
+    ox: drift[i % drift.length],
     oy: 0,
   }));
 }
 
-function freshState() {
+function initialStudio() {
   return {
     layout: 'hero',
     grade: 'sunset',
-    gradeStrength: 0.8,
-    size: 'square',
+    gradeStrength: DEFAULT_GRADE_STRENGTH,
+    size: 'wide',
     title: DEFAULT_TITLE,
-    subtitle: DEFAULT_SUBTITLE,
-    titleStyle: 'sunset',
-    badge: DEFAULT_BADGE,
+    tagline: DEFAULT_TAGLINE,
+    lettering: 'sunset',
+    kicker: DEFAULT_KICKER,
     heat: 4,
+    titleScale: DEFAULT_TITLE_SCALE,
     grain: true,
     vignette: true,
-    panels: freshPanels(),
+    sticker: true,
+    cells: initialCells(),
     selected: 0,
   };
 }
 
-let state = freshState();
+let studio = initialStudio();
 let photos = [];
 let photoSeq = 0;
 
 // --- undo / redo -----------------------------------------------------------
 
-const past = [];
-const future = [];
-const SNAP_LIMIT = 60;
+const history = { undoStack: [], redoStack: [], limit: 60 };
 
-function snapshot() {
-  return JSON.stringify({ ...state, panels: state.panels.map((p) => ({ ...p })) });
+function takeSnapshot() {
+  return JSON.stringify({ ...studio, cells: studio.cells.map((c) => ({ ...c })) });
 }
 
-function pushHistory() {
-  past.push(snapshot());
-  if (past.length > SNAP_LIMIT) past.shift();
-  future.length = 0;
-  refreshHistoryButtons();
+function remember() {
+  history.undoStack.push(takeSnapshot());
+  if (history.undoStack.length > history.limit) history.undoStack.shift();
+  history.redoStack.length = 0;
+  refreshUndoRedo();
 }
 
-function restore(json) {
+function restoreSnapshot(json) {
   const saved = JSON.parse(json);
-  state = { ...freshState(), ...saved, panels: saved.panels };
-  syncControls();
-  drawPreview();
+  studio = { ...initialStudio(), ...saved, cells: saved.cells };
+  syncAll();
+  paintPreview();
 }
 
-function undo() {
-  if (!past.length) return;
-  future.push(snapshot());
-  restore(past.pop());
-  refreshHistoryButtons();
+function stepBack() {
+  if (!history.undoStack.length) return;
+  history.redoStack.push(takeSnapshot());
+  restoreSnapshot(history.undoStack.pop());
+  refreshUndoRedo();
 }
 
-function redo() {
-  if (!future.length) return;
-  past.push(snapshot());
-  restore(future.pop());
-  refreshHistoryButtons();
+function stepForward() {
+  if (!history.redoStack.length) return;
+  history.undoStack.push(takeSnapshot());
+  restoreSnapshot(history.redoStack.pop());
+  refreshUndoRedo();
 }
 
-function refreshHistoryButtons() {
-  $('undo').disabled = past.length === 0;
-  $('redo').disabled = future.length === 0;
+function refreshUndoRedo() {
+  $('undoBtn').disabled = history.undoStack.length === 0;
+  $('redoBtn').disabled = history.redoStack.length === 0;
 }
 
 // --- photos ----------------------------------------------------------------
 
-export function loadImage(url) {
+export function readImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -98,15 +108,15 @@ export function loadImage(url) {
   });
 }
 
-async function addPhoto(img, name) {
+async function registerPhoto(img, name) {
   img.__id = `p${++photoSeq}`;
   photos.push({ img, name });
   buildPhotoStrip();
-  drawPreview();
+  paintPreview();
   return photos.length - 1;
 }
 
-async function loadSamples() {
+async function fetchSamples() {
   const defs = [
     ['samples/boulevard.jpg', 'Boulevard'],
     ['samples/rooftop.jpg', 'Rooftop'],
@@ -114,62 +124,63 @@ async function loadSamples() {
   ];
   for (const [url, name] of defs) {
     try {
-      const img = await loadImage(url);
-      await addPhoto(img, name);
+      const img = await readImage(url);
+      await registerPhoto(img, name);
     } catch {
       // A missing sample just leaves its slot empty; the cover still draws.
     }
   }
 }
 
-// --- drawing ---------------------------------------------------------------
+// --- painting --------------------------------------------------------------
 
-function drawPreview() {
-  const size = SIZES[state.size];
+function paintPreview() {
+  const size = sizeById(studio.size);
   const scale = Math.min(640 / size.width, 560 / size.height, 1);
   preview.width = Math.round(size.width * scale);
   preview.height = Math.round(size.height * scale);
-  renderCover(preview, state, photos.map((p) => p.img));
-  markSelectedPanel();
+  composeCover(preview, studio, photos.map((p) => p.img));
+  highlightCell();
 }
 
-function markSelectedPanel() {
+function highlightCell() {
   document.querySelectorAll('#photoStrip .thumb').forEach((el, i) => {
-    el.classList.toggle('active', state.panels[state.selected] && state.panels[state.selected].photo === i);
+    el.classList.toggle('active', studio.cells[studio.selected] && studio.cells[studio.selected].photo === i);
   });
-  const slot = state.panels[state.selected];
-  $('panelLabel').textContent = slot ? `Panel ${state.selected + 1} — ${photos[slot.photo]?.name ?? 'empty'}` : 'No panel';
-  $('zoom').value = slot ? slot.zoom : 1;
-  $('panX').value = slot ? slot.ox : 0;
-  $('panY').value = slot ? slot.oy : 0;
-  $('zoomVal').textContent = slot ? `${Math.round(slot.zoom * 100)}%` : '—';
+  const cell = studio.cells[studio.selected];
+  $('cellLabel').textContent = cell ? `Panel ${studio.selected + 1} — ${photos[cell.photo]?.name ?? 'empty'}` : 'No panel';
+  $('zoomRange').value = cell ? cell.zoom : 1;
+  $('panXRange').value = cell ? cell.ox : 0;
+  $('panYRange').value = cell ? cell.oy : 0;
+  $('zoomLabel').textContent = cell ? `${Math.round(cell.zoom * 100)}%` : '—';
 }
 
-// --- controls --------------------------------------------------------------
+// --- control rows ----------------------------------------------------------
 
-function buildLayoutBar() {
-  const bar = $('layoutBar');
+// One generic chip-row builder for layouts, sizes, lettering and looks:
+// a click applies the choice (with history) and repaints.
+function buildChipRow(barId, entries, isActive, onPick) {
+  const bar = $(barId);
   bar.innerHTML = '';
-  for (const [id, layout] of Object.entries(LAYOUTS)) {
+  for (const entry of entries) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = layout.label;
-    b.title = layout.blurb;
-    b.dataset.layout = id;
+    b.textContent = entry.label;
+    if (entry.blurb) b.title = entry.blurb;
+    b.dataset.choice = entry.id;
     b.addEventListener('click', () => {
-      if (state.layout === id) return;
-      pushHistory();
-      state.layout = id;
-      state.selected = 0;
-      syncControls();
-      drawPreview();
+      if (isActive(entry)) return;
+      remember();
+      onPick(entry);
+      syncAll();
+      paintPreview();
     });
     bar.appendChild(b);
   }
 }
 
-function buildGradeBar() {
+function buildGradeSwatches() {
   const bar = $('gradeBar');
   bar.innerHTML = '';
   for (const [id, grade] of Object.entries(GRADES)) {
@@ -180,51 +191,11 @@ function buildGradeBar() {
     b.dataset.grade = id;
     b.style.background = `linear-gradient(135deg, ${grade.swatch.join(', ')})`;
     b.addEventListener('click', () => {
-      if (state.grade === id) return;
-      pushHistory();
-      state.grade = id;
-      syncControls();
-      drawPreview();
-    });
-    bar.appendChild(b);
-  }
-}
-
-function buildSizeBar() {
-  const bar = $('sizeBar');
-  bar.innerHTML = '';
-  for (const [id, size] of Object.entries(SIZES)) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chip';
-    b.textContent = size.label;
-    b.dataset.size = id;
-    b.addEventListener('click', () => {
-      if (state.size === id) return;
-      pushHistory();
-      state.size = id;
-      syncControls();
-      drawPreview();
-    });
-    bar.appendChild(b);
-  }
-}
-
-function buildTitleStyleBar() {
-  const bar = $('titleStyleBar');
-  bar.innerHTML = '';
-  for (const [id, style] of Object.entries(TITLE_STYLES)) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chip';
-    b.textContent = style.label;
-    b.dataset.titleStyle = id;
-    b.addEventListener('click', () => {
-      if (state.titleStyle === id) return;
-      pushHistory();
-      state.titleStyle = id;
-      syncControls();
-      drawPreview();
+      if (studio.grade === id) return;
+      remember();
+      studio.grade = id;
+      syncAll();
+      paintPreview();
     });
     bar.appendChild(b);
   }
@@ -244,29 +215,40 @@ function buildPhotoStrip() {
     cap.textContent = photo.name;
     d.append(img, cap);
     d.addEventListener('click', () => {
-      pushHistory();
-      state.panels[state.selected].photo = i;
-      drawPreview();
+      remember();
+      studio.cells[studio.selected].photo = i;
+      paintPreview();
     });
     strip.appendChild(d);
   });
 }
 
-function syncControls() {
-  document.querySelectorAll('[data-layout]').forEach((b) => b.classList.toggle('on', b.dataset.layout === state.layout));
-  document.querySelectorAll('[data-grade]').forEach((b) => b.classList.toggle('on', b.dataset.grade === state.grade));
-  document.querySelectorAll('[data-size]').forEach((b) => b.classList.toggle('on', b.dataset.size === state.size));
-  document.querySelectorAll('[data-title-style]').forEach((b) => b.classList.toggle('on', b.dataset.titleStyle === state.titleStyle));
-  $('titleInput').value = state.title;
-  $('subtitleInput').value = state.subtitle;
-  $('badgeInput').value = state.badge;
-  $('heatInput').value = state.heat;
-  $('heatVal').textContent = '★'.repeat(state.heat) + '☆'.repeat(5 - state.heat);
-  $('gradeStrength').value = state.gradeStrength;
-  $('gradeVal').textContent = `${Math.round(state.gradeStrength * 100)}%`;
-  $('grainToggle').checked = state.grain;
-  $('vignetteToggle').checked = state.vignette;
-  markSelectedPanel();
+function syncAll() {
+  const mark = (barId, attr, current) => {
+    document.querySelectorAll(`#${barId} [data-choice]`).forEach((b) => {
+      b.classList.toggle('on', b.dataset.choice === current);
+    });
+    document.querySelectorAll(`#${barId} [data-grade]`).forEach((b) => {
+      b.classList.toggle('on', b.dataset.grade === current);
+    });
+  };
+  mark('layoutBar', 'layout', studio.layout);
+  mark('gradeBar', 'grade', studio.grade);
+  mark('sizeBar', 'size', studio.size);
+  mark('letteringBar', 'lettering', studio.lettering);
+  $('titleText').value = studio.title;
+  $('taglineText').value = studio.tagline;
+  $('kickerText').value = studio.kicker;
+  $('heatRange').value = studio.heat;
+  $('heatLabel').textContent = '★'.repeat(studio.heat) + '☆'.repeat(5 - studio.heat);
+  $('gradeStrength').value = studio.gradeStrength;
+  $('gradeLabel').textContent = `${Math.round(studio.gradeStrength * 100)}%`;
+  $('titleScale').value = studio.titleScale;
+  $('titleScaleLabel').textContent = `${Math.round(studio.titleScale * 100)}%`;
+  $('grainCheck').checked = studio.grain;
+  $('vignetteCheck').checked = studio.vignette;
+  $('stickerCheck').checked = studio.sticker;
+  highlightCell();
 }
 
 // --- export ----------------------------------------------------------------
@@ -275,13 +257,13 @@ function slug(text) {
   return (text || 'cover').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cover';
 }
 
-function exportSize(sizeId) {
+function downloadSize(sizeId) {
   return new Promise((resolve) => {
-    const size = SIZES[sizeId];
+    const size = sizeById(sizeId);
     const off = document.createElement('canvas');
     off.width = size.width;
     off.height = size.height;
-    renderCover(off, state, photos.map((p) => p.img));
+    composeCover(off, studio, photos.map((p) => p.img));
     off.toBlob((blob) => {
       if (!blob) {
         resolve(false);
@@ -289,7 +271,7 @@ function exportSize(sizeId) {
       }
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `vice-coast-${slug(state.title)}-${size.width}x${size.height}.png`;
+      a.download = `vice-coast-${slug(studio.title)}-${size.width}x${size.height}.png`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       resolve(true);
@@ -297,18 +279,18 @@ function exportSize(sizeId) {
   });
 }
 
-async function exportAll() {
-  statusEl.textContent = 'Exporting 3 sizes…';
-  for (const id of Object.keys(SIZES)) {
-    await exportSize(id);
+async function downloadEverySize() {
+  statusLine.textContent = 'Exporting 3 sizes…';
+  for (const size of EXPORT_SIZES) {
+    await downloadSize(size.id);
     await new Promise((r) => setTimeout(r, 350));
   }
-  statusEl.textContent = 'Saved 3 PNGs — square, portrait and landscape.';
+  statusLine.textContent = 'Saved 3 PNGs — square, portrait and landscape.';
 }
 
-// --- canvas interaction: click to pick a panel, drag to pan, wheel to zoom --
+// --- canvas gestures: click to pick a cell, drag to pan, wheel to zoom -----
 
-function canvasPoint(e) {
+function canvasFraction(e) {
   const rect = preview.getBoundingClientRect();
   return {
     fx: (e.clientX - rect.left) / rect.width,
@@ -316,170 +298,195 @@ function canvasPoint(e) {
   };
 }
 
-let dragging = null;
+let drag = null;
 preview.addEventListener('pointerdown', (e) => {
-  const { fx, fy } = canvasPoint(e);
-  const slot = panelAt(state, fx, fy);
+  const { fx, fy } = canvasFraction(e);
+  const slot = cellAt(studio, fx, fy);
   if (slot < 0) return;
-  state.selected = slot;
-  markSelectedPanel();
-  dragging = { slot, fx, fy, moved: false };
+  studio.selected = slot;
+  highlightCell();
+  drag = { slot, fx, fy, moved: false };
   preview.setPointerCapture(e.pointerId);
 });
 preview.addEventListener('pointermove', (e) => {
-  if (!dragging) return;
-  const { fx, fy } = canvasPoint(e);
-  const slot = state.panels[dragging.slot];
-  if (!slot) return;
-  const dx = fx - dragging.fx;
-  const dy = fy - dragging.fy;
-  if (Math.abs(dx) + Math.abs(dy) > 0.002) dragging.moved = true;
-  slot.ox = Math.max(-1, Math.min(1, slot.ox + dx * 2.4));
-  slot.oy = Math.max(-1, Math.min(1, slot.oy + dy * 2.4));
-  dragging.fx = fx;
-  dragging.fy = fy;
-  drawPreview();
+  if (!drag) return;
+  const { fx, fy } = canvasFraction(e);
+  const cell = studio.cells[drag.slot];
+  if (!cell) return;
+  const dx = fx - drag.fx;
+  const dy = fy - drag.fy;
+  if (Math.abs(dx) + Math.abs(dy) > 0.002) drag.moved = true;
+  cell.ox = Math.max(-1, Math.min(1, cell.ox + dx * 2.4));
+  cell.oy = Math.max(-1, Math.min(1, cell.oy + dy * 2.4));
+  drag.fx = fx;
+  drag.fy = fy;
+  paintPreview();
 });
 preview.addEventListener('pointerup', () => {
-  if (dragging?.moved) pushHistory();
-  dragging = null;
+  if (drag?.moved) remember();
+  drag = null;
 });
 preview.addEventListener('wheel', (e) => {
   e.preventDefault();
-  const slot = state.panels[state.selected];
-  if (!slot) return;
-  pushHistory();
-  slot.zoom = Math.max(1, Math.min(3, slot.zoom * (e.deltaY < 0 ? 1.08 : 0.93)));
-  drawPreview();
+  const cell = studio.cells[studio.selected];
+  if (!cell) return;
+  remember();
+  cell.zoom = Math.max(1, Math.min(3, cell.zoom * (e.deltaY < 0 ? 1.08 : 0.93)));
+  paintPreview();
 }, { passive: false });
 
 // --- wiring ----------------------------------------------------------------
 
-function wire() {
-  buildLayoutBar();
-  buildGradeBar();
-  buildSizeBar();
-  buildTitleStyleBar();
+function attachControls() {
+  buildChipRow('layoutBar', LAYOUTS, (e) => studio.layout === e.id, (e) => {
+    studio.layout = e.id;
+    studio.selected = 0;
+  });
+  buildGradeSwatches();
+  buildChipRow('sizeBar', EXPORT_SIZES, (e) => studio.size === e.id, (e) => {
+    studio.size = e.id;
+  });
+  buildChipRow('letteringBar', Object.entries(LETTERING).map(([id, s]) => ({ id, label: s.label })), (e) => studio.lettering === e.id, (e) => {
+    studio.lettering = e.id;
+  });
+  buildChipRow('looksBar', LOOKS, () => false, (look) => {
+    studio.layout = look.layout;
+    studio.grade = look.grade;
+    studio.lettering = look.lettering;
+    studio.selected = 0;
+  });
 
   $('upload').addEventListener('change', async (e) => {
     for (const file of e.target.files) {
-      const img = await loadImage(URL.createObjectURL(file));
-      await addPhoto(img, file.name.replace(/\.[^.]+$/, '').slice(0, 18) || 'Photo');
+      const img = await readImage(URL.createObjectURL(file));
+      await registerPhoto(img, file.name.replace(/\.[^.]+$/, '').slice(0, 18) || 'Photo');
     }
-    statusEl.textContent = `${photos.length} photo${photos.length === 1 ? '' : 's'} loaded. Click one to fill the selected panel.`;
+    statusLine.textContent = `${photos.length} photo${photos.length === 1 ? '' : 's'} loaded. Click one to fill the selected panel.`;
     e.target.value = '';
   });
 
   $('fillAll').addEventListener('click', () => {
     if (!photos.length) return;
-    pushHistory();
-    const pick = state.panels[state.selected].photo;
-    state.panels.forEach((p) => { p.photo = pick; });
-    drawPreview();
-    statusEl.textContent = 'One photo across every panel — drag each panel to frame a different crop.';
+    remember();
+    const pick = studio.cells[studio.selected].photo;
+    studio.cells.forEach((c) => { c.photo = pick; });
+    paintPreview();
+    statusLine.textContent = 'One photo across every panel — drag each panel to frame a different crop.';
   });
 
-  $('shuffle').addEventListener('click', () => {
+  $('shufflePhotos').addEventListener('click', () => {
     if (!photos.length) return;
-    pushHistory();
-    state.panels.forEach((p, i) => {
-      p.photo = (i * 2 + 1) % photos.length;
-      p.ox = ((i * 37) % 100) / 100 - 0.5;
-      p.oy = ((i * 53) % 100) / 100 - 0.5;
+    remember();
+    studio.cells.forEach((c, i) => {
+      c.photo = (i * 2 + 1) % photos.length;
+      c.ox = ((i * 37) % 100) / 100 - 0.5;
+      c.oy = ((i * 53) % 100) / 100 - 0.5;
     });
-    drawPreview();
+    paintPreview();
   });
 
-  $('titleInput').addEventListener('input', (e) => { state.title = e.target.value; drawPreview(); });
-  $('titleInput').addEventListener('change', pushHistory);
-  $('subtitleInput').addEventListener('input', (e) => { state.subtitle = e.target.value; drawPreview(); });
-  $('subtitleInput').addEventListener('change', pushHistory);
-  $('badgeInput').addEventListener('input', (e) => { state.badge = e.target.value; drawPreview(); });
-  $('badgeInput').addEventListener('change', pushHistory);
-  $('heatInput').addEventListener('input', (e) => {
-    state.heat = Number(e.target.value);
-    $('heatVal').textContent = '★'.repeat(state.heat) + '☆'.repeat(5 - state.heat);
-    drawPreview();
+  const liveText = (id, key) => {
+    $(id).addEventListener('input', (e) => { studio[key] = e.target.value; paintPreview(); });
+    $(id).addEventListener('change', remember);
+  };
+  liveText('titleText', 'title');
+  liveText('taglineText', 'tagline');
+  liveText('kickerText', 'kicker');
+
+  $('heatRange').addEventListener('input', (e) => {
+    studio.heat = Number(e.target.value);
+    $('heatLabel').textContent = '★'.repeat(studio.heat) + '☆'.repeat(5 - studio.heat);
+    paintPreview();
   });
-  $('heatInput').addEventListener('change', pushHistory);
+  $('heatRange').addEventListener('change', remember);
   $('gradeStrength').addEventListener('input', (e) => {
-    state.gradeStrength = Number(e.target.value);
-    $('gradeVal').textContent = `${Math.round(state.gradeStrength * 100)}%`;
-    drawPreview();
+    studio.gradeStrength = Number(e.target.value);
+    $('gradeLabel').textContent = `${Math.round(studio.gradeStrength * 100)}%`;
+    paintPreview();
   });
-  $('gradeStrength').addEventListener('change', pushHistory);
-  $('grainToggle').addEventListener('change', (e) => { pushHistory(); state.grain = e.target.checked; drawPreview(); });
-  $('vignetteToggle').addEventListener('change', (e) => { pushHistory(); state.vignette = e.target.checked; drawPreview(); });
+  $('gradeStrength').addEventListener('change', remember);
+  $('titleScale').addEventListener('input', (e) => {
+    studio.titleScale = Number(e.target.value);
+    $('titleScaleLabel').textContent = `${Math.round(studio.titleScale * 100)}%`;
+    paintPreview();
+  });
+  $('titleScale').addEventListener('change', remember);
 
-  $('zoom').addEventListener('input', (e) => {
-    const slot = state.panels[state.selected];
-    if (!slot) return;
-    slot.zoom = Number(e.target.value);
-    $('zoomVal').textContent = `${Math.round(slot.zoom * 100)}%`;
-    drawPreview();
+  const toggle = (id, key) => {
+    $(id).addEventListener('change', (e) => { remember(); studio[key] = e.target.checked; paintPreview(); });
+  };
+  toggle('grainCheck', 'grain');
+  toggle('vignetteCheck', 'vignette');
+  toggle('stickerCheck', 'sticker');
+
+  const cell = () => studio.cells[studio.selected];
+  $('zoomRange').addEventListener('input', (e) => {
+    if (!cell()) return;
+    cell().zoom = Number(e.target.value);
+    $('zoomLabel').textContent = `${Math.round(cell().zoom * 100)}%`;
+    paintPreview();
   });
-  $('zoom').addEventListener('change', pushHistory);
-  $('panX').addEventListener('input', (e) => { const s = state.panels[state.selected]; if (s) { s.ox = Number(e.target.value); drawPreview(); } });
-  $('panX').addEventListener('change', pushHistory);
-  $('panY').addEventListener('input', (e) => { const s = state.panels[state.selected]; if (s) { s.oy = Number(e.target.value); drawPreview(); } });
-  $('panY').addEventListener('change', pushHistory);
-  $('resetPanel').addEventListener('click', () => {
-    const s = state.panels[state.selected];
-    if (!s) return;
-    pushHistory();
-    s.zoom = 1;
-    s.ox = 0;
-    s.oy = 0;
-    drawPreview();
+  $('zoomRange').addEventListener('change', remember);
+  $('panXRange').addEventListener('input', (e) => { if (cell()) { cell().ox = Number(e.target.value); paintPreview(); } });
+  $('panXRange').addEventListener('change', remember);
+  $('panYRange').addEventListener('input', (e) => { if (cell()) { cell().oy = Number(e.target.value); paintPreview(); } });
+  $('panYRange').addEventListener('change', remember);
+  $('resetCell').addEventListener('click', () => {
+    if (!cell()) return;
+    remember();
+    cell().zoom = 1;
+    cell().ox = 0;
+    cell().oy = 0;
+    paintPreview();
   });
 
-  $('undo').addEventListener('click', undo);
-  $('redo').addEventListener('click', redo);
+  $('undoBtn').addEventListener('click', stepBack);
+  $('redoBtn').addEventListener('click', stepForward);
   $('exportOne').addEventListener('click', async () => {
-    statusEl.textContent = 'Exporting…';
-    await exportSize(state.size);
-    statusEl.textContent = `Saved ${SIZES[state.size].label} PNG.`;
+    statusLine.textContent = 'Exporting…';
+    await downloadSize(studio.size);
+    statusLine.textContent = `Saved ${sizeById(studio.size).label} PNG.`;
   });
-  $('exportAll').addEventListener('click', exportAll);
-  $('randomize').addEventListener('click', () => {
-    pushHistory();
-    const layouts = Object.keys(LAYOUTS);
+  $('exportAll').addEventListener('click', downloadEverySize);
+  $('surpriseBtn').addEventListener('click', () => {
+    remember();
+    studio.layout = LAYOUTS[Math.floor(Math.random() * LAYOUTS.length)].id;
     const grades = Object.keys(GRADES);
-    state.layout = layouts[Math.floor(Math.random() * layouts.length)];
-    state.grade = grades[Math.floor(Math.random() * grades.length)];
-    state.titleStyle = ['sunset', 'white', 'neon'][Math.floor(Math.random() * 3)];
-    syncControls();
-    drawPreview();
+    studio.grade = grades[Math.floor(Math.random() * grades.length)];
+    studio.lettering = ['sunset', 'poster', 'neon', 'gold'][Math.floor(Math.random() * 4)];
+    syncAll();
+    paintPreview();
   });
 
   document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); stepBack(); }
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); stepForward(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('exportOne').click(); }
   });
 }
 
 // --- boot ------------------------------------------------------------------
 
-wire();
-syncControls();
-refreshHistoryButtons();
+attachControls();
+syncAll();
+refreshUndoRedo();
 
 const shot = new URLSearchParams(location.search).get('shot');
+const editorBridge = {
+  get state() { return studio; },
+  setState(next) { studio = { ...studio, ...next }; },
+  get photos() { return photos; },
+  drawPreview: paintPreview,
+  syncControls: syncAll,
+  pushHistory: remember,
+};
 if (shot) {
-  loadSamples().then(() => {
-    runShot(shot, new URLSearchParams(location.search), {
-      get state() { return state; },
-      setState(next) { state = { ...state, ...next }; },
-      get photos() { return photos; },
-      drawPreview,
-      syncControls,
-      pushHistory,
-    });
+  fetchSamples().then(() => {
+    applyShot(shot, new URLSearchParams(location.search), editorBridge);
   });
 } else {
-  loadSamples().then(() => {
-    drawPreview();
-    statusEl.textContent = 'Three sample photos loaded — or drop in your own. Click a panel, drag to frame it.';
+  fetchSamples().then(() => {
+    paintPreview();
+    statusLine.textContent = 'Three sample photos loaded — or drop in your own. Click a panel, drag to frame it.';
   });
 }
