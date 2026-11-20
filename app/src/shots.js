@@ -1,81 +1,89 @@
-// Vice Coast Cover Studio — shots and loading (v7).
-// The sample photos that ship with the app, image loading, and the
-// deep-link parameters (?shot=cover|editor&photo=…&caption=…&layout=…)
-// that the screenshot manifest and shared links use.
+// Sundown Racket — photo loading + deep links.
+// Loads the demo-cast portraits (local samples/ files, or an uploaded
+// object URL), caches them, and parses the ?shot= deep links used by
+// shots.json so a screenshot run can open the exact poster or editor
+// state the manifest asks for.
 
-export const SAMPLES = [
-  { id: "pier", label: "Starter Pier", file: "samples/pier.jpg" },
-  { id: "boulevard", label: "Boulevard", file: "samples/boulevard.jpg" },
-  { id: "rooftop", label: "Rooftop", file: "samples/rooftop.jpg" },
-];
+import { CAST_ROSTER, castMember, gradeById, fontById, freshState } from "./presets.js";
 
-// Load one image by URL. Resolves with the element even on error so the
-// caller can paint a placeholder instead of hanging.
+const cache = new Map();
+
+// Load one image from a URL. Resolves with the element, rejects on error.
 export function loadImage(src) {
-  return new Promise((resolve) => {
+  if (cache.has(src)) return cache.get(src);
+  const p = new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
+    img.onerror = () => reject(new Error("cannot load " + src));
     img.src = src;
   });
+  cache.set(src, p);
+  return p;
 }
 
-// Load every sample shot into a Map<id, HTMLImageElement>.
-// `base` is the URL prefix for the app folder ("" when served at root,
-// "./" when opened from a sub-path); callers pass document-relative paths.
-export async function loadSamples(base = "") {
-  const photos = new Map();
-  await Promise.all(
-    SAMPLES.map(async (s) => {
-      const img = await loadImage(base + s.file);
-      if (img) photos.set(s.id, img);
-    }),
-  );
+// Load every cast portrait. `overrides` maps cast id -> custom URL
+// (uploaded photos). Returns a map id -> image; a photo that fails to
+// load is simply absent and the renderer paints the grade colour instead.
+export async function loadCastPhotos(overrides = {}) {
+  const photos = {};
+  await Promise.all(CAST_ROSTER.map(async (member) => {
+    const src = overrides[member.id] || ("samples/" + member.file);
+    try { photos[member.id] = await loadImage(src); }
+    catch (err) { console.warn("cast photo missing:", member.id, err.message); }
+  }));
   return photos;
 }
 
-// A photo the user adds from their own machine: an object URL, never
-// uploaded anywhere. Returns the new shot id, or null if it did not load.
-export async function addUserPhoto(photos, file) {
-  const url = URL.createObjectURL(file);
-  const img = await loadImage(url);
-  if (!img) {
-    URL.revokeObjectURL(url);
-    return null;
-  }
-  const id = `user-${photos.size + 1}-${Date.now() % 100000}`;
-  photos.set(id, img);
-  return id;
+export function photoCount(photos) {
+  return Object.keys(photos).length;
 }
 
-// Read the deep-link overrides from the current page URL.
-// Recognised keys: shot (cover|editor), photo (sample id), caption,
-// layout, grade, lettering. Unknown values are ignored by the caller.
-export function readLinkParams() {
-  const q = new URLSearchParams(window.location.search);
-  const out = {};
-  const shot = q.get("shot");
-  if (shot === "cover" || shot === "editor") out.shot = shot;
-  const photo = q.get("photo");
-  if (photo) out.photo = photo;
-  const caption = q.get("caption");
-  if (caption) out.caption = caption;
-  for (const key of ["layout", "grade", "lettering"]) {
-    const v = q.get(key);
-    if (v) out[key] = v;
+// Parse a deep link such as:
+//   ?shot=cover&cast=marcus&title=SUNDOWN%20RACKET&grade=sundown
+//   ?shot=editor&cast=lena&grade=neon&font=sunset-slant
+// Returns { mode, state } where mode is "cover" or "editor". Unknown
+// values fall back to the defaults instead of breaking the page.
+export function stateFromQuery(search) {
+  const q = new URLSearchParams(search || "");
+  const state = freshState();
+  const mode = q.get("shot") === "editor" ? "editor" : "cover";
+
+  const hero = q.get("hero");
+  if (hero && castMember(hero)) state.heroId = hero;
+
+  const cast = (q.get("cast") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (cast.length === 6 && cast.every((id) => CAST_ROSTER.some((m) => m.id === id))) {
+    state.castIds = cast;
+  } else if (cast.length === 1 && CAST_ROSTER.some((m) => m.id === cast[0])) {
+    state.heroId = cast[0];
   }
-  return out;
+
+  const title = q.get("title");
+  if (title) state.words.title = title.slice(0, 30);
+  const grade = q.get("grade");
+  if (grade && gradeById(grade)) state.words.gradeId = grade;
+  const font = q.get("font");
+  if (font && fontById(font)) state.words.fontId = font;
+  const quote = q.get("quote");
+  if (quote) state.words.quote = quote.slice(0, 60);
+  const tagline = q.get("tagline");
+  if (tagline) state.words.tagline = tagline.slice(0, 48);
+  const release = q.get("release");
+  if (release) state.words.releaseLine = release.slice(0, 24);
+  const step = parseInt(q.get("step") || "", 10);
+  if (step >= 1 && step <= 3) state.step = step;
+  return { mode, state };
 }
 
-// Apply link overrides onto a cover state object (mutates and returns it).
-// A named photo fills every panel so screenshot links look complete.
-export function applyLinkParams(state, params) {
-  if (params.caption) state.title = params.caption.slice(0, 30);
-  if (params.layout) state.layout = params.layout;
-  if (params.grade) state.grade = params.grade;
-  if (params.lettering) state.lettering = params.lettering;
-  if (params.photo) {
-    for (const p of state.panels) p.shot = params.photo;
-  }
-  return state;
+// Serialise the current state back into a shareable deep link.
+export function stateToQuery(state) {
+  const q = new URLSearchParams();
+  q.set("shot", "editor");
+  q.set("hero", state.heroId);
+  q.set("cast", state.castIds.join(","));
+  q.set("title", state.words.title);
+  q.set("grade", state.words.gradeId);
+  q.set("font", state.words.fontId);
+  q.set("step", String(state.step));
+  return "?" + q.toString();
 }

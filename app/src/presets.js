@@ -1,232 +1,144 @@
-// Vice Coast Cover Studio — preset data (v7).
-// Everything the renderer and the editor need to know about looks:
-// layouts, colour grades, lettering styles, export sizes, defaults.
-// No DOM access here; this module is pure data plus tiny lookups.
+// Sundown Racket — data layer.
+// Everything the poster is built from: the demo cast, the colour grades,
+// the title lettering, the export sizes and the default words on the cover.
+// No rendering lives here; cover.js consumes these tables.
 
-export const PHOTO_ZONE = 0.7; // fraction of the cover height above the title band
+export const COMPETITION_ID = "gta6-cover-art-01";
+export const STUDIO_NAME = "Sundown Racket Cover Studio";
+export const DEFAULT_TITLE = "SUNDOWN RACKET";
 
-// Frames are fractions of the photo zone (x, y, w, h in 0..1).
-// `tilt` is degrees of rotation; `mat` draws a white polaroid-style mat.
-export const LAYOUTS = [
+// The 8-person demo cast. Photo files live in app/samples/ and were made
+// with Pollinations (free, no key). `focal` is the face anchor used by the
+// face-aware crop: 0 = top of the photo, 1 = bottom. Portraits keep their
+// faces in frame because the crop is centred on this point, not on the
+// middle of the image.
+export const CAST_ROSTER = [
+  { id: "marcus", file: "cast-1.jpg", name: "Marcus Vale",   role: "THE DRIVER",   focal: 0.30, hero: true  },
+  { id: "lena",   file: "cast-2.jpg", name: "Lena Cross",    role: "THE FIXER",    focal: 0.28, hero: false },
+  { id: "roy",    file: "cast-3.jpg", name: "Roy Delgado",   role: "THE CAPTAIN",  focal: 0.30, hero: false },
+  { id: "eddie",  file: "cast-4.jpg", name: "Eddie Sparks",  role: "THE MECHANIC", focal: 0.32, hero: false },
+  { id: "rosa",   file: "cast-5.jpg", name: "Rosa Vega",     role: "THE RIDER",    focal: 0.28, hero: false },
+  { id: "vincent",file: "cast-6.jpg", name: "Vincent Gold",  role: "THE BOSS",     focal: 0.30, hero: false },
+  { id: "nadia",  file: "cast-7.jpg", name: "Nadia Ray",     role: "THE LOOKOUT",  focal: 0.28, hero: false },
+  { id: "tommy",  file: "cast-8.jpg", name: "Tommy Blade",   role: "THE ENFORCER", focal: 0.30, hero: false },
+];
+
+// The six faces that share the poster with the hero. The eighth cast
+// member stays in the roster so the editor can swap anyone in.
+export const POSTER_CAST_IDS = ["lena", "roy", "eddie", "rosa", "vincent", "nadia"];
+
+export function castMember(id) {
+  return CAST_ROSTER.find((m) => m.id === id) || CAST_ROSTER[0];
+}
+
+export function heroMember(state) {
+  return castMember(state.heroId || "marcus");
+}
+
+export function posterCast(state) {
+  const ids = state.castIds && state.castIds.length === 6 ? state.castIds : POSTER_CAST_IDS;
+  return ids.map(castMember);
+}
+
+// Colour grades. Each grade is a pair of palettes: the sky the poster is
+// painted on, and a three-stop luminance ramp the photos are pushed
+// through (shadow -> mid -> highlight). `ink` is the colour of the small
+// print; `accent` is the gold used by the seal, stars and tags.
+export const POSTER_GRADES = [
   {
-    id: "hero-trio",
-    label: "Hero + Trio",
-    blurb: "One big hero shot over three small panels.",
-    frames: [
-      { x: 0.015, y: 0.015, w: 0.97, h: 0.6 },
-      { x: 0.015, y: 0.635, w: 0.313, h: 0.35 },
-      { x: 0.343, y: 0.635, w: 0.313, h: 0.35 },
-      { x: 0.672, y: 0.635, w: 0.313, h: 0.35 },
-    ],
+    id: "sundown", label: "Sundown Gold",
+    sky: ["#2b1055", "#7597de"],
+    skyLow: ["#ff9a3d", "#ff2e63"],
+    ramp: ["#1c0b2e", "#b3475e", "#ffd166"],
+    ink: "#fff3d6", accent: "#ffc93d", tag: "#ff2e63",
   },
   {
-    id: "four-square",
-    label: "Four Square",
-    blurb: "A clean two-by-two grid.",
-    frames: [
-      { x: 0.015, y: 0.015, w: 0.48, h: 0.48 },
-      { x: 0.505, y: 0.015, w: 0.48, h: 0.48 },
-      { x: 0.015, y: 0.505, w: 0.48, h: 0.48 },
-      { x: 0.505, y: 0.505, w: 0.48, h: 0.48 },
-    ],
+    id: "neon", label: "Neon Night",
+    sky: ["#050510", "#123a6d"],
+    skyLow: ["#00e5ff", "#b537f2"],
+    ramp: ["#02020a", "#123a6d", "#7df9ff"],
+    ink: "#d9fbff", accent: "#00e5ff", tag: "#b537f2",
   },
   {
-    id: "nine-panel",
-    label: "Nine Panel",
-    blurb: "A three-by-three contact sheet.",
-    frames: [
-      { x: 0.012, y: 0.012, w: 0.318, h: 0.318 },
-      { x: 0.341, y: 0.012, w: 0.318, h: 0.318 },
-      { x: 0.67, y: 0.012, w: 0.318, h: 0.318 },
-      { x: 0.012, y: 0.341, w: 0.318, h: 0.318 },
-      { x: 0.341, y: 0.341, w: 0.318, h: 0.318 },
-      { x: 0.67, y: 0.341, w: 0.318, h: 0.318 },
-      { x: 0.012, y: 0.67, w: 0.318, h: 0.318 },
-      { x: 0.341, y: 0.67, w: 0.318, h: 0.318 },
-      { x: 0.67, y: 0.67, w: 0.318, h: 0.318 },
-    ],
+    id: "palm", label: "Palm Gold",
+    sky: ["#3d2200", "#8a5a00"],
+    skyLow: ["#ffb347", "#ff7b00"],
+    ramp: ["#241300", "#8a5a00", "#ffe29a"],
+    ink: "#fff6dd", accent: "#ffb347", tag: "#c96f00",
   },
   {
-    id: "tilted-snaps",
-    label: "Tilted Snaps",
-    blurb: "Three overlapping snapshots with white borders.",
-    frames: [
-      { x: 0.02, y: 0.06, w: 0.44, h: 0.78, tilt: -5, mat: true },
-      { x: 0.29, y: 0.02, w: 0.44, h: 0.78, tilt: 3, mat: true },
-      { x: 0.55, y: 0.06, w: 0.44, h: 0.78, tilt: -2, mat: true },
-    ],
+    id: "teal", label: "Teal Heat",
+    sky: ["#02202a", "#0b5563"],
+    skyLow: ["#2dd4bf", "#ff6b35"],
+    ramp: ["#01161d", "#0b5563", "#ffd166"],
+    ink: "#e6fffa", accent: "#2dd4bf", tag: "#ff6b35",
   },
   {
-    id: "full-bleed",
-    label: "Full Bleed",
-    blurb: "One photo, edge to edge.",
-    frames: [{ x: 0, y: 0, w: 1, h: 1 }],
-  },
-  {
-    id: "triptych",
-    label: "Triptych",
-    blurb: "Three tall columns.",
-    frames: [
-      { x: 0.015, y: 0.015, w: 0.313, h: 0.97 },
-      { x: 0.343, y: 0.015, w: 0.313, h: 0.97 },
-      { x: 0.672, y: 0.015, w: 0.313, h: 0.97 },
-    ],
+    id: "noir", label: "Noir",
+    sky: ["#000000", "#2b2b2b"],
+    skyLow: ["#5a5a5a", "#e8e8e8"],
+    ramp: ["#000000", "#555555", "#ffffff"],
+    ink: "#f2f2f2", accent: "#e8e8e8", tag: "#111111",
   },
 ];
 
-// A grade is a gradient-map LUT: each stop is [position 0..1, hex colour].
-// A pixel's luminance picks a colour off the ramp; `keep` blends a little
-// of the photo's own colour back in so faces stay readable.
-export const GRADES = [
-  {
-    id: "vice-sunset",
-    label: "Vice Sunset",
-    blurb: "Magenta dusk over hot orange.",
-    keep: 0.22,
-    stops: [
-      [0.0, "#12041f"],
-      [0.28, "#5b1150"],
-      [0.55, "#c62b6e"],
-      [0.78, "#ff7a3d"],
-      [1.0, "#ffd76e"],
-    ],
-  },
-  {
-    id: "neon-night",
-    label: "Neon Night",
-    blurb: "Cyan and violet after dark.",
-    keep: 0.18,
-    stops: [
-      [0.0, "#020617"],
-      [0.3, "#1b2a6b"],
-      [0.55, "#6d28a8"],
-      [0.8, "#22d3ee"],
-      [1.0, "#e0f2fe"],
-    ],
-  },
-  {
-    id: "palm-gold",
-    label: "Palm Gold",
-    blurb: "Warm late-afternoon gold.",
-    keep: 0.3,
-    stops: [
-      [0.0, "#1c0f02"],
-      [0.3, "#6b3a08"],
-      [0.55, "#c07f1e"],
-      [0.8, "#f2b544"],
-      [1.0, "#fff3c4"],
-    ],
-  },
-  {
-    id: "teal-heat",
-    label: "Teal Heat",
-    blurb: "Teal shadows, ember highlights.",
-    keep: 0.22,
-    stops: [
-      [0.0, "#03181c"],
-      [0.3, "#0f766e"],
-      [0.55, "#3f7d6b"],
-      [0.8, "#f97316"],
-      [1.0, "#ffedd5"],
-    ],
-  },
-  {
-    id: "noir",
-    label: "Noir",
-    blurb: "Hard black and white with silver mids.",
-    keep: 0.0,
-    stops: [
-      [0.0, "#000000"],
-      [0.35, "#3f3f46"],
-      [0.65, "#a1a1aa"],
-      [1.0, "#ffffff"],
-    ],
-  },
+export function gradeById(id) {
+  return POSTER_GRADES.find((g) => g.id === id) || POSTER_GRADES[0];
+}
+
+// Title lettering. Each style is a canvas font stack plus the chrome
+// treatment the renderer applies: `chrome` paints the striped metal fill,
+// `glow` adds a hot outline, `flat` is plain heavy capitals.
+export const TITLE_FONTS = [
+  { id: "chrome-block", label: "Chrome Block", stack: "900 {px}px 'Arial Black', Impact, sans-serif", treatment: "chrome", lean: 0 },
+  { id: "sunset-slant", label: "Sunset Slant", stack: "italic 900 {px}px 'Arial Black', Impact, sans-serif", treatment: "glow", lean: -0.06 },
+  { id: "noir-tall",    label: "Noir Tall",    stack: "900 {px}px 'Arial Narrow', Impact, sans-serif", treatment: "flat", lean: 0 },
 ];
 
-// Lettering styles for the big title on the sunset band.
-export const LETTERINGS = [
-  {
-    id: "vice-block",
-    label: "Vice Block",
-    blurb: "Heavy upright capitals.",
-    family: "'Arial Black', 'Archivo Black', sans-serif",
-    weight: 900,
-    italic: false,
-    squeeze: 1,
-    glow: null,
-    fill: "#ffffff",
-  },
-  {
-    id: "sunset-slant",
-    label: "Sunset Slant",
-    blurb: "Leaning italics with a hot-pink glow.",
-    family: "'Arial Black', sans-serif",
-    weight: 900,
-    italic: true,
-    squeeze: 1,
-    glow: "#ff2d78",
-    fill: "#fff7ed",
-  },
-  {
-    id: "noir-condensed",
-    label: "Noir Condensed",
-    blurb: "Tall narrow capitals.",
-    family: "Impact, 'Arial Narrow', sans-serif",
-    weight: 400,
-    italic: false,
-    squeeze: 0.78,
-    glow: null,
-    fill: "#f4f4f5",
-  },
-];
+export function fontById(id) {
+  return TITLE_FONTS.find((f) => f.id === id) || TITLE_FONTS[0];
+}
 
-// One-click export sizes.
+// The three export sizes. The poster ratio is the middle one; the other
+// two re-flow the same composition (see cover.js `frameFor`).
 export const EXPORT_SIZES = [
-  { id: "square", label: "Square 1080 × 1080", w: 1080, h: 1080 },
-  { id: "portrait", label: "Portrait 1080 × 1350", w: 1080, h: 1350 },
-  { id: "wide", label: "Wide 1920 × 1080", w: 1920, h: 1080 },
+  { id: "square",   label: "Square",   w: 1080, h: 1080 },
+  { id: "poster",   label: "Poster",   w: 1080, h: 1350 },
+  { id: "wide",     label: "Wide",     w: 1920, h: 1080 },
 ];
 
-export const MAX_TITLE = 30;
-export const MAX_PANELS = 9;
+export function sizeById(id) {
+  return EXPORT_SIZES.find((s) => s.id === id) || EXPORT_SIZES[1];
+}
 
-// A fresh cover: hero layout, sunset grade, block lettering, pier everywhere.
-export function freshCover() {
+// Default words printed on the poster. Every field is editable in step 2.
+export const DEFAULT_WORDS = {
+  title: DEFAULT_TITLE,
+  fontId: "chrome-block",
+  scriptLine: "a Sundown Pictures production",
+  tagline: "EVERY CREW NEEDS A DRIVER",
+  quote: "THE HOTTEST RIDE OF THE YEAR",
+  quoteSource: "Golden Mile Gazette",
+  billing:
+    "SUNDOWN PICTURES presents MARCUS VALE LENA CROSS ROY DELGADO EDDIE SPARKS ROSA VEGA VINCENT GOLD NADIA RAY TOMMY BLADE  music by THE MIDNIGHT MOTORS  casting by GOLDEN MILE  written & directed by A. SUNDOWN",
+  sealText: "BEST CAST",
+  sealRing: "GOLDEN MILE  •  VOL. 1  •  ",
+  releaseLine: "COMING SOON",
+  editionTag: "VOL. 1",
+  gradeId: "sundown",
+};
+
+// Fresh editor state. `crops` holds one face-aware crop per cast slot:
+// zoom (1 = fit), dx / dy (-1..1 pan inside the frame).
+export function freshState() {
+  const crops = {};
+  for (const m of CAST_ROSTER) crops[m.id] = { zoom: 1.12, dx: 0, dy: 0 };
   return {
-    layout: "hero-trio",
-    grade: "vice-sunset",
-    lettering: "vice-block",
-    title: "VICE COAST",
-    subtitle: "SUNSET BOULEVARD • EST. 1986",
-    ribbon: "VICE CITY",
-    stars: 4,
-    panels: Array.from({ length: MAX_PANELS }, (_, i) => ({
-      shot: i === 0 ? "pier" : i % 3 === 1 ? "boulevard" : "rooftop",
-      zoom: 1,
-      ox: 0,
-      oy: 0,
-    })),
+    heroId: "marcus",
+    castIds: [...POSTER_CAST_IDS],
+    words: { ...DEFAULT_WORDS },
+    crops,
+    selectedId: "marcus",
+    step: 1,
   };
-}
-
-export function findLayout(id) {
-  return LAYOUTS.find((l) => l.id === id) || LAYOUTS[0];
-}
-
-export function findGrade(id) {
-  return GRADES.find((g) => g.id === id) || GRADES[0];
-}
-
-export function findLettering(id) {
-  return LETTERINGS.find((l) => l.id === id) || LETTERINGS[0];
-}
-
-// Turn a title into a safe file-name stem, e.g. "Vice Coast!" -> "vice-coast".
-export function slugify(text) {
-  const slug = String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "vice-coast";
 }
