@@ -1,220 +1,243 @@
-// Vice Coast Cover Studio — catalogue (v4).
-//
-// Every choice the studio offers lives here as plain data: the six cover
-// arrangements, the five dusk grades, the three export sizes and the sample
-// photos. The painter (cover.js) and the editor (studio.js) both read this
-// one catalogue, so a layout or grade can never drift out of sync between
-// the preview and the export.
-//
-// Shapes, in brief:
-// - A layout is { name, note, band, frames }: `frames` are rectangles in
-//   fractions of the cover, [x, y, w, h], plus an optional `tilt` in
-//   degrees for the polaroid-style arrangements. `band` is the fraction of
-//   the cover height the sunset lettering band takes at the bottom.
-// - A grade is { name, note, stops, wash, warm }: `stops` is a gradient
-//   map (position 0..1 -> [r, g, b]) that shadows, mids and highlights are
-//   remapped through; `wash` is a soft colour veil over the whole cover;
-//   `warm` nudges the red channel for golden-hour skin.
-// - A size is { label, w, h } in export pixels.
+// Vice Coast Cover Studio — presets: the data behind the studio.
+// Layouts, colour grades (gradient-map LUT stops), lettering styles,
+// sample photos and export sizes. No drawing code lives here, only data.
 
-export const LAYOUT_TABLE = {
-  'vice-hero': {
-    name: 'Vice Hero',
-    note: 'One tall hero frame, three stacked moments beside it.',
-    band: 0.26,
-    frames: [
-      { box: [0, 0, 0.64, 1], tilt: 0 },
-      { box: [0.64, 0, 0.36, 0.34], tilt: 0 },
-      { box: [0.64, 0.34, 0.36, 0.33], tilt: 0 },
-      { box: [0.64, 0.67, 0.36, 0.33], tilt: 0 },
-    ],
+// The three photos bundled with the app. pier + boulevard came with the
+// kit starter; rooftop is a dusk rooftop shot made for this entry.
+export const SAMPLES = [
+  { id: 'pier', label: 'Pier at Dusk', file: 'samples/pier.jpg' },
+  { id: 'boulevard', label: 'Boulevard', file: 'samples/boulevard.jpg' },
+  { id: 'rooftop', label: 'Rooftop', file: 'samples/rooftop.jpg' },
+];
+
+// Every layout is a function of the canvas size returning one cell per
+// panel: { x, y, w, h, rot } in pixels. rot is a tilt in radians (0 when
+// the panel sits straight). The studio always keeps one panel-state entry
+// per cell, in the same order.
+export const LAYOUTS = [
+  {
+    id: 'hero-trio',
+    name: 'Hero + Trio',
+    hint: 'One big hero shot over three small panels',
+    cells(w, h) {
+      const gap = Math.round(w * 0.012);
+      const heroH = Math.round(h * 0.60);
+      const rowY = heroH + gap;
+      const rowH = h - rowY;
+      const colW = Math.round((w - gap * 2) / 3);
+      return [
+        { x: 0, y: 0, w, h: heroH, rot: 0 },
+        { x: 0, y: rowY, w: colW, h: rowH, rot: 0 },
+        { x: colW + gap, y: rowY, w: colW, h: rowH, rot: 0 },
+        { x: (colW + gap) * 2, y: rowY, w: w - (colW + gap) * 2, h: rowH, rot: 0 },
+      ];
+    },
   },
-  'sunset-strip': {
-    name: 'Sunset Strip',
-    note: 'A wide hero up top, three frames along the bottom.',
-    band: 0.26,
-    frames: [
-      { box: [0, 0, 1, 0.6], tilt: 0 },
-      { box: [0, 0.6, 0.34, 0.4], tilt: 0 },
-      { box: [0.34, 0.6, 0.33, 0.4], tilt: 0 },
-      { box: [0.67, 0.6, 0.33, 0.4], tilt: 0 },
-    ],
+  {
+    id: 'four-square',
+    name: 'Four Square',
+    hint: 'A clean 2 x 2 grid',
+    cells(w, h) {
+      const gap = Math.round(w * 0.012);
+      const cw = Math.round((w - gap) / 2);
+      const ch = Math.round((h - gap) / 2);
+      return [
+        { x: 0, y: 0, w: cw, h: ch, rot: 0 },
+        { x: cw + gap, y: 0, w: w - cw - gap, h: ch, rot: 0 },
+        { x: 0, y: ch + gap, w: cw, h: h - ch - gap, rot: 0 },
+        { x: cw + gap, y: ch + gap, w: w - cw - gap, h: h - ch - gap, rot: 0 },
+      ];
+    },
   },
-  'vice-quad': {
-    name: 'Vice Quad',
-    note: 'Four equal frames, the classic poster grid.',
-    band: 0.24,
-    frames: [
-      { box: [0, 0, 0.5, 0.5], tilt: 0 },
-      { box: [0.5, 0, 0.5, 0.5], tilt: 0 },
-      { box: [0, 0.5, 0.5, 0.5], tilt: 0 },
-      { box: [0.5, 0.5, 0.5, 0.5], tilt: 0 },
-    ],
+  {
+    id: 'nine-panel',
+    name: 'Nine Panel',
+    hint: 'A 3 x 3 contact sheet',
+    cells(w, h) {
+      const gap = Math.round(w * 0.01);
+      const cw = Math.round((w - gap * 2) / 3);
+      const ch = Math.round((h - gap * 2) / 3);
+      const out = [];
+      for (let r = 0; r < 3; r += 1) {
+        for (let c = 0; c < 3; c += 1) {
+          out.push({
+            x: c * (cw + gap),
+            y: r * (ch + gap),
+            w: c === 2 ? w - c * (cw + gap) : cw,
+            h: r === 2 ? h - r * (ch + gap) : ch,
+            rot: 0,
+          });
+        }
+      }
+      return out;
+    },
   },
-  'neon-trio': {
-    name: 'Neon Trio',
-    note: 'Three tall strips, like a run of film stills.',
-    band: 0.26,
-    frames: [
-      { box: [0, 0, 0.34, 1], tilt: 0 },
-      { box: [0.34, 0, 0.33, 1], tilt: 0 },
-      { box: [0.67, 0, 0.33, 1], tilt: 0 },
-    ],
-  },
-  'tilted-snaps': {
+  {
+    id: 'tilted-snaps',
     name: 'Tilted Snaps',
-    note: 'A hero shot with two snapshots tossed on top, polaroid style.',
-    band: 0.26,
-    frames: [
-      { box: [0, 0, 1, 1], tilt: 0 },
-      { box: [0.58, 0.05, 0.36, 0.42], tilt: 6 },
-      { box: [0.05, 0.53, 0.34, 0.4], tilt: -5 },
-    ],
+    hint: 'Three overlapping snapshots, tossed on the table',
+    cells(w, h) {
+      const cw = Math.round(w * 0.52);
+      const ch = Math.round(h * 0.52);
+      return [
+        { x: Math.round(w * 0.05), y: Math.round(h * 0.06), w: cw, h: ch, rot: -0.07 },
+        { x: Math.round(w * 0.43), y: Math.round(h * 0.10), w: cw, h: ch, rot: 0.06 },
+        { x: Math.round(w * 0.24), y: Math.round(h * 0.42), w: cw, h: ch, rot: -0.03 },
+      ];
+    },
   },
-  'full-bleed': {
+  {
+    id: 'full-bleed',
     name: 'Full Bleed',
-    note: 'One photo edge to edge; the lettering band does the talking.',
-    band: 0.28,
-    frames: [{ box: [0, 0, 1, 1], tilt: 0 }],
+    hint: 'One photo, edge to edge',
+    cells(w, h) {
+      return [{ x: 0, y: 0, w, h, rot: 0 }];
+    },
   },
-};
-
-export const LAYOUT_ORDER = [
-  'vice-hero',
-  'sunset-strip',
-  'vice-quad',
-  'neon-trio',
-  'tilted-snaps',
-  'full-bleed',
+  {
+    id: 'triptych',
+    name: 'Triptych',
+    hint: 'Three tall columns',
+    cells(w, h) {
+      const gap = Math.round(w * 0.012);
+      const cw = Math.round((w - gap * 2) / 3);
+      return [
+        { x: 0, y: 0, w: cw, h, rot: 0 },
+        { x: cw + gap, y: 0, w: cw, h, rot: 0 },
+        { x: (cw + gap) * 2, y: 0, w: w - (cw + gap) * 2, h, rot: 0 },
+      ];
+    },
+  },
 ];
 
-export const GRADE_TABLE = {
-  'vice-sunset': {
+// A grade is a gradient map: the luminance of each pixel is remapped
+// through these colour stops, so shadows, mids and highlights each take
+// the grade's own hue. Stops are [position 0..1, hex colour].
+export const GRADES = [
+  {
+    id: 'vice-sunset',
     name: 'Vice Sunset',
-    note: 'Magenta shadows, orange-gold highlights.',
+    hint: 'Magenta dusk over hot orange',
     stops: [
-      [0.0, 24, 7, 44],
-      [0.25, 72, 20, 76],
-      [0.5, 156, 60, 94],
-      [0.75, 230, 126, 82],
-      [1.0, 255, 212, 148],
+      [0.0, '#160a24'],
+      [0.25, '#4a1a52'],
+      [0.5, '#b23a6e'],
+      [0.75, '#ff7a3d'],
+      [1.0, '#ffd98a'],
     ],
-    wash: { colour: '#ff7a3c', strength: 0.1 },
-    warm: 1.06,
   },
-  'neon-night': {
+  {
+    id: 'neon-night',
     name: 'Neon Night',
-    note: 'Teal shadows, hot-pink highlights.',
+    hint: 'Cyan and violet after dark',
     stops: [
-      [0.0, 5, 17, 33],
-      [0.25, 15, 64, 90],
-      [0.5, 94, 90, 138],
-      [0.75, 212, 84, 156],
-      [1.0, 255, 188, 218],
+      [0.0, '#050914'],
+      [0.25, '#14224e'],
+      [0.5, '#274b9e'],
+      [0.75, '#22d3ee'],
+      [1.0, '#f0abfc'],
     ],
-    wash: { colour: '#22e6ff', strength: 0.08 },
-    warm: 0.98,
   },
-  'palm-gold': {
+  {
+    id: 'palm-gold',
     name: 'Palm Gold',
-    note: 'Honeyed golden hour, soft and warm.',
+    hint: 'Warm late-afternoon gold',
     stops: [
-      [0.0, 29, 19, 9],
-      [0.25, 94, 60, 29],
-      [0.5, 176, 116, 56],
-      [0.75, 236, 176, 106],
-      [1.0, 255, 234, 188],
+      [0.0, '#1c1206'],
+      [0.25, '#5a3a12'],
+      [0.5, '#a8742a'],
+      [0.75, '#e8b64c'],
+      [1.0, '#fff3c4'],
     ],
-    wash: { colour: '#ffc46b', strength: 0.12 },
-    warm: 1.1,
   },
-  'miami-mint': {
-    name: 'Miami Mint',
-    note: 'Pastel teal and bubblegum, gentle contrast.',
+  {
+    id: 'teal-heat',
+    name: 'Teal Heat',
+    hint: 'Teal shadows, ember highlights',
     stops: [
-      [0.0, 21, 43, 51],
-      [0.25, 76, 126, 130],
-      [0.5, 148, 176, 166],
-      [0.75, 224, 176, 186],
-      [1.0, 255, 230, 224],
+      [0.0, '#03161a'],
+      [0.25, '#0b4a4a'],
+      [0.5, '#12806a'],
+      [0.75, '#f08a3c'],
+      [1.0, '#ffe9b0'],
     ],
-    wash: { colour: '#ff8fd0', strength: 0.07 },
-    warm: 1.0,
   },
-  'noir-vice': {
-    name: 'Noir Vice',
-    note: 'High-contrast black and white with a pink bleed.',
+  {
+    id: 'noir',
+    name: 'Noir',
+    hint: 'Hard black and white, silver mids',
     stops: [
-      [0.0, 5, 5, 9],
-      [0.25, 46, 42, 54],
-      [0.5, 116, 110, 124],
-      [0.75, 194, 186, 196],
-      [1.0, 247, 243, 249],
+      [0.0, '#000000'],
+      [0.3, '#2b2b2b'],
+      [0.6, '#8a8a8a'],
+      [0.85, '#d9d9d9'],
+      [1.0, '#ffffff'],
     ],
-    wash: { colour: '#ff4d8d', strength: 0.1 },
-    warm: 1.0,
   },
-};
-
-export const GRADE_ORDER = [
-  'vice-sunset',
-  'neon-night',
-  'palm-gold',
-  'miami-mint',
-  'noir-vice',
 ];
 
-// The three post sizes the bounty asks for. `key` is what the editor and
-// the ?shot= scenes use; the export buttons walk this list in order.
-export const SIZE_TABLE = {
-  square: { label: 'Square · 1080 × 1080', w: 1080, h: 1080 },
-  story: { label: 'Story · 1080 × 1350', w: 1080, h: 1350 },
-  wide: { label: 'Wide · 1920 × 1080', w: 1920, h: 1080 },
-};
-
-export const SIZE_ORDER = ['square', 'story', 'wide'];
-
-// Sample photos shipped under app/samples/. All three were made with an
-// image model for this entry: no real people, no logos, no text in frame.
-export const SAMPLE_LIST = [
-  { key: 'rooftop', name: 'Rooftop Dusk', file: 'samples/rooftop.jpg' },
-  { key: 'boulevard', name: 'Boulevard Queen', file: 'samples/boulevard.jpg' },
-  { key: 'pier', name: 'Pier Pressure', file: 'samples/pier.jpg' },
+// Lettering styles for the title band. Each one is a different voice:
+// blocky and loud, glowing neon, or tall and severe.
+export const LETTERING = [
+  {
+    id: 'vice-block',
+    name: 'Vice Block',
+    hint: 'Heavy slab capitals, pink on dark',
+    weight: 900,
+    family: "'Arial Black', 'Helvetica Neue', sans-serif",
+    tracking: 0.04,
+    fill: '#fff3f8',
+    stroke: '#ff2e88',
+    strokeWidth: 0.16,
+    shadow: 'rgba(255, 46, 136, 0.55)',
+    upper: true,
+  },
+  {
+    id: 'neon-script',
+    name: 'Neon Script',
+    hint: 'Glowing rounded letters, cyan on night',
+    weight: 800,
+    family: "'Trebuchet MS', 'Segoe UI', sans-serif",
+    tracking: 0.08,
+    fill: '#eafcff',
+    stroke: '#19c8e8',
+    strokeWidth: 0.1,
+    shadow: 'rgba(25, 200, 232, 0.8)',
+    upper: true,
+  },
+  {
+    id: 'noir-condensed',
+    name: 'Noir Condensed',
+    hint: 'Tall narrow capitals, bone white',
+    weight: 700,
+    family: "'Impact', 'Haettenschweiler', 'Arial Narrow', sans-serif",
+    tracking: 0.14,
+    fill: '#f4efe4',
+    stroke: '#111111',
+    strokeWidth: 0.12,
+    shadow: 'rgba(0, 0, 0, 0.65)',
+    upper: true,
+  },
 ];
 
-export function layoutById(id) {
-  return LAYOUT_TABLE[id] ?? LAYOUT_TABLE['vice-hero'];
+export const EXPORT_SIZES = [
+  { id: 'square', label: 'Square 1080 x 1080', w: 1080, h: 1080 },
+  { id: 'portrait', label: 'Portrait 1080 x 1350', w: 1080, h: 1350 },
+  { id: 'wide', label: 'Wide 1920 x 1080', w: 1920, h: 1080 },
+];
+
+export function findLayout(id) {
+  return LAYOUTS.find((l) => l.id === id) ?? LAYOUTS[0];
 }
 
-export function gradeById(id) {
-  return GRADE_TABLE[id] ?? GRADE_TABLE['vice-sunset'];
+export function findGrade(id) {
+  return GRADES.find((g) => g.id === id) ?? GRADES[0];
 }
 
-export function sizeById(id) {
-  return SIZE_TABLE[id] ?? SIZE_TABLE.square;
+export function findLettering(id) {
+  return LETTERING.find((l) => l.id === id) ?? LETTERING[0];
 }
 
-// A fresh cover state. `crops` holds one crop per frame: zoom (1 means the
-// plain cover fit) and pan offsets as fractions of the frame. The opening
-// frame starts a touch zoomed-in and lifted, so the hero shot lands with
-// its subject high in the frame instead of dead centre — the stronger
-// first-cover framing. `images` holds one loaded image (or null) per frame.
-export function makeCoverState() {
-  const crops = [];
-  for (let i = 0; i < 4; i += 1) {
-    crops.push({ zoom: i === 0 ? 1.06 : 1, dx: 0, dy: i === 0 ? -0.03 : 0 });
-  }
-  return {
-    layout: 'vice-hero',
-    grade: 'vice-sunset',
-    title: 'VICE COAST',
-    subtitle: 'a vice city story',
-    seal: 'EST. 2026',
-    size: 'square',
-    grain: true,
-    vignette: true,
-    picked: 0,
-    images: [null, null, null, null],
-    crops,
-  };
+export function findSample(id) {
+  return SAMPLES.find((s) => s.id === id) ?? SAMPLES[0];
 }

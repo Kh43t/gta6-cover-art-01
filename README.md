@@ -1,88 +1,112 @@
-# Vice Coast Cover Studio — Make GTA 6 Cover Art (v4)
+# Vice Coast Cover Studio — Make GTA 6 Cover Art
 
-Turn any photo and a caption into GTA-style multi-panel cover art, graded
-like a Vice City sunset, and export it as a PNG to share. The whole thing
-runs from static files under `app/` — no server, no upload, no network
-request. Photos never leave the machine.
+An offline single-page web app that makes GTA-style cover art. No network
+at runtime, no web fonts, no external images: every visual is drawn by the
+app on canvas, and photos stay on the machine that opens them.
 
-## Try it
+## Run it
 
 ```sh
 node serve.ts
-# open http://localhost:8080
 ```
 
-1. Pick a sample photo (or load your own into the picked frame).
-2. Click a frame to pick it, drag to move the photo, scroll to zoom, or
-   nudge it with the arrow keys.
-3. Pick one of 6 layouts and 5 grades, write the title and subtitle.
-4. Export the square (1080×1080), story (1080×1350) or wide (1920×1080)
-   PNG — or all three at once.
-
-## What it makes
-
-- **6 layouts** — Vice Hero, Sunset Strip, Vice Quad, Neon Trio,
-  Tilted Snaps (polaroid-style snapshots tossed over a hero shot) and
-  Full Bleed. The hero frame carries a thin gold edge, so the eye lands
-  on the cover's protagonist first, the way the classic covers do.
-- **5 grades** — Vice Sunset, Neon Night, Palm Gold, Miami Mint and
-  Noir Vice. Each is a real gradient map: shadows, mids and highlights
-  are remapped through the grade's colours, plus a soft tint wash.
-- **A richer sunset lettering band** — dusk gradient with a glowing
-  horizon, a retro sun cut into slats with rays fanning out behind the
-  title, a low skyline and palm silhouettes, huge outlined lettering
-  with a pink-and-gold underline bar, an italic script subtitle, a
-  five-star row and a round seal.
-- **Per-frame crop and position** — every frame has its own zoom and
-  pan; one photo can fill every frame or each frame can hold a different
-  one. The opening frame starts slightly zoomed-in and lifted, so the
-  hero shot is framed with its subject high instead of dead centre.
-- **Polish** — film grain, vignette, white poster gutters, undo/redo
-  (Ctrl+Z / Ctrl+Y), shuffle-the-look, and a live preview that is the
-  exact code path the export uses. Export filenames follow your title.
-
-## Files
-
-| Path | What it is |
-| --- | --- |
-| `app/index.html` | The studio page: preview canvas + controls. |
-| `app/style.css` | The dusk theme and the responsive studio grid. |
-| `app/src/presets.js` | Layouts, grades, export sizes, samples, fresh state. |
-| `app/src/cover.js` | The painter: frames, gradient-map grade, lettering band, grain. |
-| `app/src/studio.js` | Editor wiring: pickers, drag-to-pan, history, exports. |
-| `app/src/shots.js` | Fixed `?shot=` scenes used for the screenshots. |
-| `app/samples/` | Three model-made sample photos (rooftop, boulevard, pier). |
-| `main.ts` | Hand-in program: copies `app/` + `screenshots/` to `/output`, writes `dossier.json`. |
-| `shots.json` | The four screenshot scenes. |
-| `screenshots/` | 1-cover (wide cover), 2-editor, 3-cover (story cover), 4-cover (square cover). |
-
-Screenshot scenes are the app itself: `?shot=cover` shows the exported
-cover full frame, `?shot=editor` shows the studio with a sample photo
-loaded. The cover screenshot is a landscape 1280×720 export; the other
-covers show the story and square sizes.
-
-## Hand-in
+Then open <http://localhost:8080>. To hand the entry in:
 
 ```sh
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
-`main.ts` never removes the output directory itself — it clears only the
-`app`, `screenshots` and `dossier.json` entries it owns inside it — so it
-also runs as an unprivileged user against a read-only repository, the way
-the grader runs it. Run it twice and the outputs are byte-identical
-(verified for v4: two root runs identical, and a run as user `nobody`
-against a root-owned output directory exits 0 with identical output,
-including a re-run over stale entries from the previous run).
+## Layouts
 
-## Originality
+Six layouts, switched from the **Layout** menu:
 
-All art, lettering and code are original and made for this entry. No
-Rockstar Games logo, artwork, character or font is used anywhere; the
-lettering is drawn with system fonts. The three sample photos were made
-with an image model for this entry: no real people, no logos, no text in
-the frame.
+- **Hero + Trio** — one big hero shot over three small panels.
+- **Four Square** — a clean 2 × 2 grid.
+- **Nine Panel** — a 3 × 3 contact sheet.
+- **Tilted Snaps** — three overlapping snapshots with white polaroid borders.
+- **Full Bleed** — one photo, edge to edge.
+- **Triptych** — three tall columns.
 
-## License
+Changing layout keeps the photos already placed and re-fits the panel list
+to the new cell count.
 
-MIT — see `LICENSE`.
+## Colour grades
+
+Five grades, switched from the **Colour grade** menu. Each grade is a
+gradient-map LUT: every pixel's luminance is remapped through the grade's
+colour stops, so shadows, mids and highlights each take the grade's hue,
+while a little of the photo's own colour is kept so faces stay readable.
+
+- **Vice Sunset** — magenta dusk over hot orange.
+- **Neon Night** — cyan and violet after dark.
+- **Palm Gold** — warm late-afternoon gold.
+- **Teal Heat** — teal shadows, ember highlights.
+- **Noir** — hard black and white with silver mids.
+
+## Words
+
+- **Title** — the big words on the sunset band (max 30 characters).
+- **Subtitle** — a smaller line under the title.
+- **Badge ribbon** — the angled ribbon in the top-left corner.
+- **Heat stars** — 0–5 stars under the sun.
+- **Lettering** — three styles: Vice Block (heavy slab capitals, pink on
+  dark), Neon Script (glowing rounded letters, cyan on night), Noir
+  Condensed (tall narrow capitals, bone white).
+
+## The title band
+
+Every cover ends with the same sunset band: a purple-to-orange gradient
+with a halftone dot field, a city skyline with palms along its top edge,
+and a low sun cut by horizontal slats with rays fanning behind it. Film
+grain and a vignette finish the cover; both can be switched off.
+
+## Working a panel
+
+Click a panel to select it — the panel controls follow the selection.
+
+- **Photo** — pick one of the three bundled samples (Pier at Dusk,
+  Boulevard, Rooftop) or upload your own photo into the panel. Uploads
+  use a local object URL; nothing is sent anywhere.
+- **Drag** — drag the photo inside its panel to reposition it.
+- **Scroll** — scroll over the canvas to zoom the selected panel (1×–4×).
+- **Sliders** — Zoom, Move left/right, Move up/down for fine control.
+- **Arrow keys** — nudge the selected panel (Shift for bigger steps).
+
+**Undo / Redo** cover every change (layout, grade, words, panel moves,
+uploads) — one undo step per edit, via the buttons or Ctrl+Z / Ctrl+Y.
+
+## Export
+
+One click per size, from the **Finish** section:
+
+- Square 1080 × 1080
+- Portrait 1080 × 1350
+- Wide 1920 × 1080
+
+Files are PNGs named after the title, e.g.
+`vice-coast-1080x1080.png`. The title is slugged (lowercase, spaces to
+dashes, accents stripped); an empty title falls back to
+`vice-coast-cover`.
+
+## Samples
+
+- `app/samples/pier.jpg` — Pier at Dusk (kit starter sample).
+- `app/samples/boulevard.jpg` — Boulevard (kit starter sample).
+- `app/samples/rooftop.jpg` — Rooftop, a dusk rooftop shot made for this
+  entry.
+
+## Files
+
+- `app/index.html` — the page and controls.
+- `app/style.css` — the dark neon workbench styling.
+- `app/src/studio.js` — state, history, picking, upload, export.
+- `app/src/cover.js` — the canvas renderer (layouts, grade LUT, title
+  band, sun, skyline, grain, vignette).
+- `app/src/presets.js` — layouts, grades, lettering, samples, export sizes.
+- `app/src/shots.js` — fixed scenes for screenshots (`?shot=cover` /
+  `?shot=editor`).
+- `main.ts` — copies `app/` and `screenshots/` to the output dir and
+  writes `dossier.json`.
+- `serve.ts` — the local dev server (port 8080).
+- `shots.json` — the four screenshot scenes.
+- `screenshots/` — 1-cover, 2-editor, 3-cover, 4-cover.
