@@ -1,19 +1,19 @@
-/* Vice Coast Cover Studio — styles (v3).
+/* Vice Coast Cover Studio — styles (v4).
    A dusk theme: deep violet page, sunset gradients, warm cream panels.
    The editor is a two-column studio; the preview stays sticky on desktop
    and stacks above the controls on narrow screens. */
 
 :root {
-  --ink: #fff8ef;
-  --ink-dim: #d8c8ee;
-  --page: #150826;
-  --panel: #221040;
-  --panel-edge: #3d2066;
-  --gold: #ffc46b;
-  --pink: #ff2e88;
-  --orange: #ff7a3c;
-  --teal: #22e6ff;
-  --radius: 14px;
+  --paper: #fff8ef;
+  --paper-dim: #d8c8ee;
+  --dusk: #150826;
+  --card: #221040;
+  --card-line: #3d2066;
+  --amber: #ffc46b;
+  --magenta: #ff2e88;
+  --ember: #ff7a3c;
+  --aqua: #22e6ff;
+  --corner: 14px;
 }
 
 * { box-sizing: border-box; }
@@ -24,8 +24,8 @@ body {
   background:
     radial-gradient(900px 500px at 85% -10%, rgba(255, 46, 136, 0.28), transparent 60%),
     radial-gradient(700px 420px at -10% 110%, rgba(255, 122, 60, 0.22), transparent 60%),
-    var(--page);
-  color: var(--ink);
+    var(--dusk);
+  color: var(--paper);
   font-family: "Segoe UI", system-ui, sans-serif;
   line-height: 1.45;
 }
@@ -38,7 +38,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 22px;
-  border-bottom: 1px solid var(--panel-edge);
+  border-bottom: 1px solid var(--card-line);
   background: rgba(20, 6, 40, 0.72);
 }
 
@@ -59,45 +59,46 @@ body {
   line-height: 1.05;
 }
 .brand h1 span {
-  color: var(--gold);
+  color: var(--amber);
   font-size: 15px;
   letter-spacing: 3px;
   text-transform: uppercase;
 }
-.tagline { margin: 2px 0 0; color: var(--ink-dim); font-size: 13px; }
+.tagline { margin: 2px 0 0; color: var(--paper-dim); font-size: 13px; }
 
 .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* --- buttons ------------------------------------------------------------ */
 button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
 .ghost-btn {
   padding: 8px 14px;
-  border: 1px solid var(--panel-edge);
+  border: 1px solid var(--card-line);
   border-radius: 999px;
   background: transparent;
 }
-.ghost-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.ghost-btn:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
 
 .primary-btn {
   flex: 1;
   padding: 12px 10px;
   border: none;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--pink), var(--orange));
+  background: linear-gradient(135deg, var(--magenta), var(--ember));
   font-weight: 700;
   color: #fff;
   box-shadow: 0 4px 18px rgba(255, 46, 136, 0.35);
 }
-.primary-btn.alt { background: linear-gradient(135deg, #7b2ff7, var(--teal)); box-shadow: 0 4px 18px rgba(34, 230, 255, 0.25); }
+.primary-btn.alt { background: linear-gradient(135deg, #7b2ff7, var(--aqua)); box-shadow: 0 4px 18px rgba(34, 230, 255, 0.25); }
 .primary-btn:hover { filter: brightness(1.12); }
 
 .text-btn {
   padding: 4px 0;
   border: none;
   background: none;
-  color: var(--gold);
+  color: var(--amber);
   font-size: 13px;
   text-align: left;
 }
@@ -117,12 +118,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .preview-pane { position: sticky; top: 16px; }
 .preview-frame {
   padding: 14px;
-  border: 1px solid var(--panel-edge);
-  border-radius: var(--radius);
+  border: 1px solid var(--card-line);
+  border-radius: var(--corner);
   background: linear-gradient(180deg, #2a1150, #1a0a33);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
-#preview {
+#cv {
   display: block;
   width: 100%;
   height: auto;
@@ -131,15 +132,15 @@ button:disabled { opacity: 0.45; cursor: default; }
   touch-action: none;
   background: #2a1150;
 }
-#preview:active { cursor: grabbing; }
-.preview-hint { margin: 10px 2px 0; color: var(--ink-dim); font-size: 12.5px; text-align: center; }
+#cv:active { cursor: grabbing; }
+.preview-hint { margin: 10px 2px 0; color: var(--paper-dim); font-size: 12.5px; text-align: center; }
 .status {
   margin: 12px 2px 0;
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(255, 196, 107, 0.1);
   border: 1px solid rgba(255, 196, 107, 0.35);
-  color: var(--gold);
+  color: var(--amber);
   font-size: 13.5px;
 }
 
@@ -147,18 +148,18 @@ button:disabled { opacity: 0.45; cursor: default; }
 .controls { display: flex; flex-direction: column; gap: 16px; }
 .control-block {
   padding: 16px;
-  border: 1px solid var(--panel-edge);
-  border-radius: var(--radius);
-  background: var(--panel);
+  border: 1px solid var(--card-line);
+  border-radius: var(--corner);
+  background: var(--card);
 }
 .control-block h2 {
   margin: 0 0 10px;
   font-size: 14px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--amber);
 }
-.help { margin: 0 0 10px; color: var(--ink-dim); font-size: 13px; }
+.help { margin: 0 0 10px; color: var(--paper-dim); font-size: 13px; }
 
 .swatch-row { display: flex; gap: 8px; }
 .swatch-row.wrap { flex-wrap: wrap; }
@@ -174,8 +175,8 @@ button:disabled { opacity: 0.45; cursor: default; }
   font-size: 12px;
   text-align: center;
 }
-.swatch:hover { border-color: var(--panel-edge); }
-.swatch.active { border-color: var(--gold); background: rgba(255, 196, 107, 0.14); }
+.swatch:hover { border-color: var(--card-line); }
+.swatch.active { border-color: var(--amber); background: rgba(255, 196, 107, 0.14); }
 .swatch img { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; display: block; }
 
 .mini-grid {
@@ -195,7 +196,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   display: block;
   margin-top: 10px;
   padding: 11px;
-  border: 1px dashed var(--gold);
+  border: 1px dashed var(--amber);
   border-radius: 10px;
   text-align: center;
   font-weight: 600;
@@ -211,30 +212,30 @@ button:disabled { opacity: 0.45; cursor: default; }
   gap: 10px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--panel-edge);
+  border-top: 1px solid var(--card-line);
 }
-.panel-label { font-size: 13px; color: var(--ink-dim); }
+.panel-label { font-size: 13px; color: var(--paper-dim); }
 .zoom-label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.zoom-label input { width: 130px; accent-color: var(--pink); }
+.zoom-label input { width: 130px; accent-color: var(--magenta); }
 
-.field { display: block; margin-bottom: 10px; font-size: 13px; color: var(--ink-dim); }
+.field { display: block; margin-bottom: 10px; font-size: 13px; color: var(--paper-dim); }
 .field input {
   display: block;
   width: 100%;
   margin-top: 4px;
   padding: 9px 10px;
-  border: 1px solid var(--panel-edge);
+  border: 1px solid var(--card-line);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.3);
-  color: var(--ink);
+  color: var(--paper);
   font: inherit;
 }
-.field input:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+.field input:focus { outline: 2px solid var(--amber); border-color: var(--amber); }
 .check { display: inline-flex; align-items: center; gap: 7px; margin-right: 18px; font-size: 13.5px; }
-.check input { accent-color: var(--pink); width: 16px; height: 16px; }
+.check input { accent-color: var(--magenta); width: 16px; height: 16px; }
 
 .export-row { display: flex; gap: 10px; margin: 4px 0 10px; }
-.fineprint { color: var(--ink-dim); font-size: 12px; }
+.fineprint { color: var(--paper-dim); font-size: 12px; }
 .fineprint p { margin: 0; }
 
 /* --- screenshot scenes --------------------------------------------------- */
@@ -246,7 +247,7 @@ body.shot-cover .status { display: none; }
 body.shot-cover .studio { display: block; max-width: none; padding: 0; }
 body.shot-cover .preview-pane { position: static; }
 body.shot-cover .preview-frame { padding: 0; border: none; border-radius: 0; background: none; box-shadow: none; }
-body.shot-cover #preview {
+body.shot-cover #cv {
   width: 100vw;
   height: 100vh;
   object-fit: contain;

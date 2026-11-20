@@ -1,27 +1,40 @@
-// Vice Coast Cover Studio — editor wiring (v3).
-// Owns the page state, the controls, undo/redo, drag-to-pan cropping and the
-// PNG exports. The cover itself is painted by cover.js; this file only
-// decides *what* to paint and *when*. Photos never leave the machine: uploads
-// are read with object URLs and samples come from app/samples/.
-import { renderCover, panelHit } from './cover.js';
-import { EXPORT_SIZES, GRADES, LAYOUTS, SAMPLES, findLayout, findSize, freshState } from './presets.js';
-import { stageScene } from './shots.js';
+// Vice Coast Cover Studio — editor wiring (v4).
+//
+// Owns the page state, the pickers, undo/redo, drag-to-pan cropping and
+// the PNG exports. The cover itself is painted by cover.js; this file only
+// decides *what* to paint and *when*. Photos never leave the machine:
+// uploads are read through object URLs and samples come from app/samples/.
+import { paintCover, frameAtPoint } from './cover.js';
+import {
+  GRADE_ORDER,
+  GRADE_TABLE,
+  LAYOUT_ORDER,
+  LAYOUT_TABLE,
+  SAMPLE_LIST,
+  SIZE_ORDER,
+  SIZE_TABLE,
+  layoutById,
+  makeCoverState,
+  sizeById,
+} from './presets.js';
+import { runScene } from './shots.js';
 
-const $ = (id) => document.getElementById(id);
-const preview = $('preview');
-const statusEl = $('status');
+const el = (id) => document.getElementById(id);
+const cv = el('cv');
+const noteEl = el('note');
 
-const state = freshState();
-// Every photo slot keeps its image plus a key we can restore from history:
-// a sample id like "rooftop", or an upload tag like "upload:3".
-const photoKeys = [null, null, null, null];
-const uploadCache = new Map();
-let uploadCount = 0;
+const cover = makeCoverState();
+// Every frame keeps its image plus a key history can restore from: a
+// sample key like "rooftop", or an upload tag like "upload:3".
+const keys = [null, null, null, null];
+const uploads = new Map();
+const samples = new Map();
+let uploadNo = 0;
 
-let undoStack = [];
-let redoStack = [];
+let past = [];
+let future = [];
 
-function loadImage(url) {
+function fetchImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -32,374 +45,397 @@ function loadImage(url) {
 
 // Preview resolution: cap the long side so dragging stays snappy; exports
 // always render at the full post size.
-function previewSize() {
-  const size = findSize(state.sizeId);
+function previewDims() {
+  const size = sizeById(cover.size);
   const cap = 880;
   const scale = Math.min(1, cap / Math.max(size.w, size.h));
   return { w: Math.round(size.w * scale), h: Math.round(size.h * scale) };
 }
 
-function render() {
-  const { w, h } = previewSize();
-  renderCover(preview, { state, w, h });
-  syncPanelReadout();
+function draw() {
+  const { w, h } = previewDims();
+  paintCover(cv, { state: cover, w, h });
+  refreshReadout();
+  markActive();
 }
 
-function syncPanelReadout() {
-  const layout = findLayout(state.layoutId);
-  const count = layout.panels.length;
-  $('panelLabel').textContent = `Panel ${state.selected + 1} of ${count} · ${layout.name}`;
-  const slot = state.slots[state.selected];
-  $('zoomRange').value = String(slot.zoom);
-  $('zoomValue').textContent = `${slot.zoom.toFixed(2)}×`;
+function refreshReadout() {
+  const layout = layoutById(cover.layout);
+  const count = layout.frames.length;
+  el('slotLabel').textContent = `Frame ${cover.picked + 1} of ${count} · ${layout.name}`;
+  const crop = cover.crops[cover.picked];
+  el('zoomSlider').value = String(crop.zoom);
+  el('zoomText').textContent = `${crop.zoom.toFixed(2)}×`;
 }
 
 // --- history ---------------------------------------------------------------
-function snapshot() {
+function takeSnapshot() {
   return JSON.stringify({
-    layoutId: state.layoutId,
-    gradeId: state.gradeId,
-    title: state.title,
-    subtitle: state.subtitle,
-    seal: state.seal,
-    sizeId: state.sizeId,
-    grain: state.grain,
-    vignette: state.vignette,
-    selected: state.selected,
-    slots: state.slots,
-    photoKeys,
+    layout: cover.layout,
+    grade: cover.grade,
+    title: cover.title,
+    subtitle: cover.subtitle,
+    seal: cover.seal,
+    size: cover.size,
+    grain: cover.grain,
+    vignette: cover.vignette,
+    picked: cover.picked,
+    crops: cover.crops,
+    keys,
   });
 }
 
-function restore(json) {
+function applySnapshot(json) {
   const s = JSON.parse(json);
-  state.layoutId = s.layoutId;
-  state.gradeId = s.gradeId;
-  state.title = s.title;
-  state.subtitle = s.subtitle;
-  state.seal = s.seal;
-  state.sizeId = s.sizeId;
-  state.grain = s.grain;
-  state.vignette = s.vignette;
-  state.selected = Math.min(s.selected, findLayout(s.layoutId).panels.length - 1);
-  state.slots = s.slots;
-  s.photoKeys.forEach((key, i) => {
-    photoKeys[i] = key;
-    state.photos[i] = key ? photoForKey(key) : null;
+  cover.layout = s.layout;
+  cover.grade = s.grade;
+  cover.title = s.title;
+  cover.subtitle = s.subtitle;
+  cover.seal = s.seal;
+  cover.size = s.size;
+  cover.grain = s.grain;
+  cover.vignette = s.vignette;
+  cover.picked = Math.min(s.picked, layoutById(s.layout).frames.length - 1);
+  cover.crops = s.crops;
+  s.keys.forEach((key, i) => {
+    keys[i] = key;
+    cover.images[i] = key ? imageForKey(key) : null;
   });
-  syncControlValues();
-  render();
+  syncForm();
+  draw();
 }
 
-function photoForKey(key) {
+function imageForKey(key) {
   if (!key) return null;
-  if (key.startsWith('upload:')) return uploadCache.get(key) ?? null;
-  const sample = SAMPLES.find((s) => s.id === key);
-  return sample ? sampleCache.get(sample.id) ?? null : null;
+  if (key.startsWith('upload:')) return uploads.get(key) ?? null;
+  return samples.get(key) ?? null;
 }
 
-const sampleCache = new Map();
-
-function pushHistory() {
-  undoStack.push(snapshot());
-  if (undoStack.length > 60) undoStack.shift();
-  redoStack = [];
-  syncHistoryButtons();
+function remember() {
+  past.push(takeSnapshot());
+  if (past.length > 60) past.shift();
+  future = [];
+  syncHistory();
 }
 
-function undo() {
-  if (!undoStack.length) return;
-  redoStack.push(snapshot());
-  restore(undoStack.pop());
-  syncHistoryButtons();
-  setStatus('Undid that change.');
+function stepBack() {
+  if (!past.length) return;
+  future.push(takeSnapshot());
+  applySnapshot(past.pop());
+  syncHistory();
+  say('Undid that change.');
 }
 
-function redo() {
-  if (!redoStack.length) return;
-  undoStack.push(snapshot());
-  restore(redoStack.pop());
-  syncHistoryButtons();
-  setStatus('Redid that change.');
+function stepForward() {
+  if (!future.length) return;
+  past.push(takeSnapshot());
+  applySnapshot(future.pop());
+  syncHistory();
+  say('Redid that change.');
 }
 
-function syncHistoryButtons() {
-  $('undoBtn').disabled = undoStack.length === 0;
-  $('redoBtn').disabled = redoStack.length === 0;
+function syncHistory() {
+  el('backBtn').disabled = past.length === 0;
+  el('fwdBtn').disabled = future.length === 0;
 }
 
-function setStatus(text) {
-  statusEl.textContent = text;
+function say(text) {
+  noteEl.textContent = text;
 }
 
 // --- photos ------------------------------------------------------------------
-async function fillWithSample(id) {
-  const sample = SAMPLES.find((s) => s.id === id);
+async function useSample(key) {
+  const sample = SAMPLE_LIST.find((s) => s.key === key);
   if (!sample) return;
-  pushHistory();
-  let img = sampleCache.get(id);
+  remember();
+  let img = samples.get(key);
   if (!img) {
-    img = await loadImage(sample.file);
-    sampleCache.set(id, img);
+    img = await fetchImage(sample.file);
+    samples.set(key, img);
   }
-  state.photos = state.photos.map(() => img);
-  for (let i = 0; i < photoKeys.length; i += 1) photoKeys[i] = id;
-  render();
-  setStatus(`Loaded sample photo “${sample.name}” into every panel.`);
+  cover.images = cover.images.map(() => img);
+  for (let i = 0; i < keys.length; i += 1) keys[i] = key;
+  draw();
+  say(`Loaded sample photo “${sample.name}” into every frame.`);
 }
 
-async function fillSelectedWithFile(file) {
+async function placeUpload(file) {
   if (!file) return;
   const url = URL.createObjectURL(file);
-  const img = await loadImage(url);
-  uploadCount += 1;
-  const key = `upload:${uploadCount}`;
-  uploadCache.set(key, img);
-  pushHistory();
-  state.photos[state.selected] = img;
-  photoKeys[state.selected] = key;
-  render();
-  setStatus(`“${file.name}” is in panel ${state.selected + 1}. Pick another panel to place it elsewhere.`);
+  const img = await fetchImage(url);
+  uploadNo += 1;
+  const key = `upload:${uploadNo}`;
+  uploads.set(key, img);
+  remember();
+  cover.images[cover.picked] = img;
+  keys[cover.picked] = key;
+  draw();
+  say(`“${file.name}” is in frame ${cover.picked + 1}. Pick another frame to place it elsewhere.`);
 }
 
-function fillEverywhereFromSelected() {
-  const img = state.photos[state.selected];
+function spreadSelected() {
+  const img = cover.images[cover.picked];
   if (!img) {
-    setStatus('Load a photo into the selected panel first.');
+    say('Load a photo into the picked frame first.');
     return;
   }
-  pushHistory();
-  const key = photoKeys[state.selected];
-  state.photos = state.photos.map(() => img);
-  for (let i = 0; i < photoKeys.length; i += 1) photoKeys[i] = key;
-  render();
-  setStatus('That photo now fills every panel.');
+  remember();
+  const key = keys[cover.picked];
+  cover.images = cover.images.map(() => img);
+  for (let i = 0; i < keys.length; i += 1) keys[i] = key;
+  draw();
+  say('That photo now fills every frame.');
 }
 
-// --- controls ----------------------------------------------------------------
-function buildSwatches() {
-  const layoutRow = $('layoutRow');
-  LAYOUTS.forEach((layout) => {
+// --- pickers -----------------------------------------------------------------
+function buildPickers() {
+  const layoutRow = el('layoutRow');
+  LAYOUT_ORDER.forEach((id) => {
+    const layout = LAYOUT_TABLE[id];
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'swatch layout-swatch';
-    b.dataset.id = layout.id;
-    b.title = layout.blurb;
-    b.innerHTML = `<span class="mini-grid">${layout.panels
+    b.dataset.id = id;
+    b.title = layout.note;
+    b.innerHTML = `<span class="mini-grid">${layout.frames
       .map(
-        (p) =>
-          `<i style="left:${p.rect[0] * 100}%;top:${p.rect[1] * 100}%;width:${p.rect[2] * 100}%;height:${p.rect[3] * 100}%"></i>`,
+        (f) =>
+          `<i style="left:${f.box[0] * 100}%;top:${f.box[1] * 100}%;width:${f.box[2] * 100}%;height:${f.box[3] * 100}%"></i>`,
       )
       .join('')}</span><span>${layout.name}</span>`;
     b.addEventListener('click', () => {
-      if (state.layoutId === layout.id) return;
-      pushHistory();
-      state.layoutId = layout.id;
-      state.selected = 0;
-      render();
-      setStatus(`Layout: ${layout.name}. ${layout.blurb}`);
+      if (cover.layout === id) return;
+      remember();
+      cover.layout = id;
+      cover.picked = 0;
+      draw();
+      say(`Layout: ${layout.name}. ${layout.note}`);
     });
     layoutRow.appendChild(b);
   });
 
-  const gradeRow = $('gradeRow');
-  GRADES.forEach((grade) => {
+  const gradeRow = el('gradeRow');
+  GRADE_ORDER.forEach((id) => {
+    const grade = GRADE_TABLE[id];
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'swatch grade-swatch';
-    b.dataset.id = grade.id;
-    b.title = grade.blurb;
+    b.dataset.id = id;
+    b.title = grade.note;
     const stops = grade.stops.map(([t, r, g, bl]) => `rgb(${r},${g},${bl}) ${Math.round(t * 100)}%`).join(', ');
     b.innerHTML = `<span class="mini-grade" style="background:linear-gradient(135deg, ${stops})"></span><span>${grade.name}</span>`;
     b.addEventListener('click', () => {
-      if (state.gradeId === grade.id) return;
-      pushHistory();
-      state.gradeId = grade.id;
-      render();
-      setStatus(`Grade: ${grade.name}. ${grade.blurb}`);
+      if (cover.grade === id) return;
+      remember();
+      cover.grade = id;
+      draw();
+      say(`Grade: ${grade.name}. ${grade.note}`);
     });
     gradeRow.appendChild(b);
   });
 
-  const sizeRow = $('sizeRow');
-  EXPORT_SIZES.forEach((size) => {
+  const sizeRow = el('sizeRow');
+  SIZE_ORDER.forEach((id) => {
+    const size = SIZE_TABLE[id];
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'swatch size-swatch';
-    b.dataset.id = size.id;
+    b.dataset.id = id;
     b.textContent = size.label;
     b.addEventListener('click', () => {
-      if (state.sizeId === size.id) return;
-      pushHistory();
-      state.sizeId = size.id;
-      render();
-      setStatus(`Preview size: ${size.label}. Exports use the same size.`);
+      if (cover.size === id) return;
+      remember();
+      cover.size = id;
+      draw();
+      say(`Preview size: ${size.label}. Exports use the same size.`);
     });
     sizeRow.appendChild(b);
   });
 
-  const sampleRow = $('sampleRow');
-  SAMPLES.forEach((sample) => {
+  const photoRow = el('photoRow');
+  SAMPLE_LIST.forEach((sample) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'swatch sample-swatch';
-    b.dataset.id = sample.id;
+    b.dataset.id = sample.key;
     b.innerHTML = `<img src="${sample.file}" alt="${sample.name}"><span>${sample.name}</span>`;
-    b.addEventListener('click', () => fillWithSample(sample.id));
-    sampleRow.appendChild(b);
+    b.addEventListener('click', () => useSample(sample.key));
+    photoRow.appendChild(b);
   });
 }
 
-function markActiveSwatches() {
+function markActive() {
   document.querySelectorAll('#layoutRow .swatch').forEach((b) => {
-    b.classList.toggle('active', b.dataset.id === state.layoutId);
+    b.classList.toggle('active', b.dataset.id === cover.layout);
   });
   document.querySelectorAll('#gradeRow .swatch').forEach((b) => {
-    b.classList.toggle('active', b.dataset.id === state.gradeId);
+    b.classList.toggle('active', b.dataset.id === cover.grade);
   });
   document.querySelectorAll('#sizeRow .swatch').forEach((b) => {
-    b.classList.toggle('active', b.dataset.id === state.sizeId);
+    b.classList.toggle('active', b.dataset.id === cover.size);
   });
-  document.querySelectorAll('#sampleRow .swatch').forEach((b) => {
-    b.classList.toggle('active', b.dataset.id === photoKeys[state.selected]);
+  document.querySelectorAll('#photoRow .swatch').forEach((b) => {
+    b.classList.toggle('active', b.dataset.id === keys[cover.picked]);
   });
 }
 
-function syncControlValues() {
-  $('titleInput').value = state.title;
-  $('subtitleInput').value = state.subtitle;
-  $('sealInput').value = state.seal;
-  $('grainCheck').checked = state.grain;
-  $('vignetteCheck').checked = state.vignette;
-  markActiveSwatches();
+function syncForm() {
+  el('titleField').value = cover.title;
+  el('subField').value = cover.subtitle;
+  el('sealField').value = cover.seal;
+  el('grainToggle').checked = cover.grain;
+  el('shadeToggle').checked = cover.vignette;
+  markActive();
 }
 
-function wireControls() {
-  $('titleInput').addEventListener('input', (e) => {
-    state.title = e.target.value;
-    render();
+function bindForm() {
+  el('titleField').addEventListener('input', (e) => {
+    cover.title = e.target.value;
+    draw();
   });
-  $('titleInput').addEventListener('change', pushHistory);
-  $('subtitleInput').addEventListener('input', (e) => {
-    state.subtitle = e.target.value;
-    render();
+  el('titleField').addEventListener('change', remember);
+  el('subField').addEventListener('input', (e) => {
+    cover.subtitle = e.target.value;
+    draw();
   });
-  $('subtitleInput').addEventListener('change', pushHistory);
-  $('sealInput').addEventListener('input', (e) => {
-    state.seal = e.target.value;
-    render();
+  el('subField').addEventListener('change', remember);
+  el('sealField').addEventListener('input', (e) => {
+    cover.seal = e.target.value;
+    draw();
   });
-  $('sealInput').addEventListener('change', pushHistory);
-  $('grainCheck').addEventListener('change', (e) => {
-    pushHistory();
-    state.grain = e.target.checked;
-    render();
+  el('sealField').addEventListener('change', remember);
+  el('grainToggle').addEventListener('change', (e) => {
+    remember();
+    cover.grain = e.target.checked;
+    draw();
   });
-  $('vignetteCheck').addEventListener('change', (e) => {
-    pushHistory();
-    state.vignette = e.target.checked;
-    render();
+  el('shadeToggle').addEventListener('change', (e) => {
+    remember();
+    cover.vignette = e.target.checked;
+    draw();
   });
-  $('photoFile').addEventListener('change', (e) => {
-    fillSelectedWithFile(e.target.files[0]);
+  el('uploadInput').addEventListener('change', (e) => {
+    placeUpload(e.target.files[0]);
     e.target.value = '';
   });
-  $('fillEverywhere').addEventListener('click', fillEverywhereFromSelected);
-  $('zoomRange').addEventListener('input', (e) => {
-    state.slots[state.selected].zoom = Number(e.target.value);
-    render();
+  el('spreadBtn').addEventListener('click', spreadSelected);
+  el('zoomSlider').addEventListener('input', (e) => {
+    cover.crops[cover.picked].zoom = Number(e.target.value);
+    draw();
   });
-  $('zoomRange').addEventListener('change', pushHistory);
-  $('resetCrop').addEventListener('click', () => {
-    pushHistory();
-    state.slots[state.selected] = { zoom: 1, dx: 0, dy: 0 };
-    render();
-    setStatus(`Panel ${state.selected + 1} crop reset.`);
+  el('zoomSlider').addEventListener('change', remember);
+  el('cropReset').addEventListener('click', () => {
+    remember();
+    cover.crops[cover.picked] = { zoom: 1, dx: 0, dy: 0 };
+    draw();
+    say(`Frame ${cover.picked + 1} crop reset.`);
   });
-  $('undoBtn').addEventListener('click', undo);
-  $('redoBtn').addEventListener('click', redo);
-  $('shuffleBtn').addEventListener('click', () => {
-    pushHistory();
+  el('backBtn').addEventListener('click', stepBack);
+  el('fwdBtn').addEventListener('click', stepForward);
+  el('diceBtn').addEventListener('click', () => {
+    remember();
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    state.layoutId = pick(LAYOUTS).id;
-    state.gradeId = pick(GRADES).id;
-    state.selected = 0;
-    render();
-    setStatus('Shuffled the layout and grade — keep the ones you like.');
+    cover.layout = pick(LAYOUT_ORDER);
+    cover.grade = pick(GRADE_ORDER);
+    cover.picked = 0;
+    draw();
+    say('Shuffled the layout and grade — keep the ones you like.');
   });
-  $('exportOne').addEventListener('click', () => exportCover(state.sizeId));
-  $('exportAll').addEventListener('click', exportAllSizes);
+  el('saveOneBtn').addEventListener('click', () => saveSize(cover.size));
+  el('saveAllBtn').addEventListener('click', saveAll);
   document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
       e.preventDefault();
-      undo();
+      stepBack();
     } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
       e.preventDefault();
-      redo();
+      stepForward();
+    } else if (e.key.startsWith('Arrow')) {
+      // Arrow keys nudge the picked frame's photo; hold Shift for a
+      // bigger nudge. A plain click still picks the frame first.
+      e.preventDefault();
+      const step = e.shiftKey ? 0.06 : 0.02;
+      const crop = cover.crops[cover.picked];
+      if (e.key === 'ArrowLeft') crop.dx -= step;
+      if (e.key === 'ArrowRight') crop.dx += step;
+      if (e.key === 'ArrowUp') crop.dy -= step;
+      if (e.key === 'ArrowDown') crop.dy += step;
+      crop.dx = Math.max(-0.6, Math.min(0.6, crop.dx));
+      crop.dy = Math.max(-0.6, Math.min(0.6, crop.dy));
+      draw();
     }
   });
 }
 
-// Drag on the preview pans the selected panel; a plain click selects a
-// panel; the wheel zooms it. Coordinates are mapped from CSS pixels to the
+// Drag on the preview pans the picked frame; a plain click picks a frame;
+// the wheel zooms it. Coordinates are mapped from CSS pixels to the
 // preview canvas's own pixels.
-function wirePreview() {
+function bindStage() {
   let dragging = false;
   let moved = false;
   let lastX = 0;
   let lastY = 0;
 
   const toCanvas = (e) => {
-    const box = preview.getBoundingClientRect();
+    const box = cv.getBoundingClientRect();
     return {
-      x: ((e.clientX - box.left) / box.width) * preview.width,
-      y: ((e.clientY - box.top) / box.height) * preview.height,
-      rect: box,
+      x: ((e.clientX - box.left) / box.width) * cv.width,
+      y: ((e.clientY - box.top) / box.height) * cv.height,
     };
   };
 
-  preview.addEventListener('pointerdown', (e) => {
+  cv.addEventListener('pointerdown', (e) => {
     const p = toCanvas(e);
-    const hit = panelHit(state.layoutId, preview.width, preview.height, p.x, p.y);
+    const hit = frameAtPoint(cover.layout, cv.width, cv.height, p.x, p.y);
     if (hit < 0) return;
-    if (hit !== state.selected) {
-      state.selected = hit;
-      render();
+    if (hit !== cover.picked) {
+      cover.picked = hit;
+      draw();
     }
     dragging = true;
     moved = false;
     lastX = e.clientX;
     lastY = e.clientY;
-    preview.setPointerCapture(e.pointerId);
+    cv.setPointerCapture(e.pointerId);
   });
-  preview.addEventListener('pointermove', (e) => {
+  cv.addEventListener('pointermove', (e) => {
     if (!dragging) return;
-    const box = preview.getBoundingClientRect();
+    const box = cv.getBoundingClientRect();
     const dx = (e.clientX - lastX) / box.width;
     const dy = (e.clientY - lastY) / box.height;
     if (Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY) > 3) moved = true;
     lastX = e.clientX;
     lastY = e.clientY;
     if (moved) {
-      const slot = state.slots[state.selected];
-      slot.dx = Math.max(-0.6, Math.min(0.6, slot.dx + dx));
-      slot.dy = Math.max(-0.6, Math.min(0.6, slot.dy + dy));
-      render();
+      const crop = cover.crops[cover.picked];
+      crop.dx = Math.max(-0.6, Math.min(0.6, crop.dx + dx));
+      crop.dy = Math.max(-0.6, Math.min(0.6, crop.dy + dy));
+      draw();
     }
   });
-  preview.addEventListener('pointerup', () => {
-    if (dragging && moved) pushHistory();
+  cv.addEventListener('pointerup', () => {
+    if (dragging && moved) remember();
     dragging = false;
   });
-  preview.addEventListener('wheel', (e) => {
+  cv.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const slot = state.slots[state.selected];
-    slot.zoom = Math.max(1, Math.min(2.5, slot.zoom - Math.sign(e.deltaY) * 0.08));
-    render();
+    const crop = cover.crops[cover.picked];
+    crop.zoom = Math.max(1, Math.min(2.5, crop.zoom - Math.sign(e.deltaY) * 0.08));
+    draw();
   }, { passive: false });
 }
 
 // --- exports -----------------------------------------------------------------
+function fileSlug() {
+  const slug = (cover.title || 'vice-coast')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'vice-coast';
+}
+
 function downloadCanvas(canvas, filename) {
   return new Promise((resolve) => {
     canvas.toBlob((blob) => {
@@ -413,71 +449,71 @@ function downloadCanvas(canvas, filename) {
   });
 }
 
-async function exportCover(sizeId) {
-  const size = findSize(sizeId);
+async function saveSize(sizeId) {
+  const size = sizeById(sizeId);
   const off = document.createElement('canvas');
-  renderCover(off, { state, w: size.w, h: size.h });
-  await downloadCanvas(off, `vice-coast-${size.w}x${size.h}.png`);
-  setStatus(`Saved vice-coast-${size.w}x${size.h}.png — share it anywhere.`);
+  paintCover(off, { state: cover, w: size.w, h: size.h });
+  await downloadCanvas(off, `${fileSlug()}-${size.w}x${size.h}.png`);
+  say(`Saved ${fileSlug()}-${size.w}x${size.h}.png — share it anywhere.`);
 }
 
-async function exportAllSizes() {
-  for (const size of EXPORT_SIZES) {
-    await exportCover(size.id);
+async function saveAll() {
+  for (const id of SIZE_ORDER) {
+    await saveSize(id);
     await new Promise((r) => setTimeout(r, 250));
   }
-  setStatus('Saved all three sizes: square, story and wide.');
+  say('Saved all three sizes: square, story and wide.');
 }
 
 // --- boot ----------------------------------------------------------------------
 const stage = {
-  setLayout(id) {
-    state.layoutId = id;
+  applyLayout(id) {
+    cover.layout = id;
   },
-  setGrade(id) {
-    state.gradeId = id;
+  applyGrade(id) {
+    cover.grade = id;
   },
-  setTitle(text) {
-    state.title = text;
+  applyTitle(text) {
+    cover.title = text;
   },
-  setSubtitle(text) {
-    state.subtitle = text;
+  applySubtitle(text) {
+    cover.subtitle = text;
   },
-  async loadSample(id) {
-    const sample = SAMPLES.find((s) => s.id === id);
+  async loadSample(key) {
+    const sample = SAMPLE_LIST.find((s) => s.key === key);
     if (!sample) return;
-    let img = sampleCache.get(id);
+    let img = samples.get(key);
     if (!img) {
-      img = await loadImage(sample.file);
-      sampleCache.set(id, img);
+      img = await fetchImage(sample.file);
+      samples.set(key, img);
     }
-    state.photos = state.photos.map(() => img);
-    for (let i = 0; i < photoKeys.length; i += 1) photoKeys[i] = id;
+    cover.images = cover.images.map(() => img);
+    for (let i = 0; i < keys.length; i += 1) keys[i] = key;
   },
-  render() {
-    syncControlValues();
-    render();
+  draw() {
+    syncForm();
+    draw();
   },
-  renderCoverSize(w, h) {
-    renderCover(preview, { state, w, h });
+  drawAtSize(w, h) {
+    paintCover(cv, { state: cover, w, h });
   },
 };
 
-buildSwatches();
-wireControls();
-wirePreview();
-syncControlValues();
-syncHistoryButtons();
-render();
+buildPickers();
+bindForm();
+bindStage();
+syncForm();
+syncHistory();
+draw();
 
 const query = new URLSearchParams(location.search);
 const shot = query.get('shot');
 if (shot) {
-  stageScene(shot, query, stage).catch((err) => {
-    setStatus(`Scene failed: ${err.message}`);
+  runScene(shot, query, stage).catch((err) => {
+    say(`Scene failed: ${err.message}`);
   });
 } else {
-  // First paint already shows art: load the rooftop sample so nobody stares
-  // at empty panels while deciding what to make.
-  fillWithSample('rooftop').catch((err) => setStatus(`Sample failed: ${err.message}`));
+  // The first paint already shows art: load the rooftop sample so nobody
+  // stares at empty frames while deciding what to make.
+  useSample('rooftop').catch((err) => say(`Sample failed: ${err.message}`));
 }

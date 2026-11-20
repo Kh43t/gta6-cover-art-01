@@ -18,36 +18,36 @@
     </div>
   </div>
   <div class="top-actions">
-    <button id="undoBtn" type="button" class="ghost-btn" disabled>↩ Undo</button>
-    <button id="redoBtn" type="button" class="ghost-btn" disabled>↪ Redo</button>
-    <button id="shuffleBtn" type="button" class="ghost-btn">🎲 Shuffle look</button>
+    <button id="backBtn" type="button" class="ghost-btn" disabled>↩ Undo</button>
+    <button id="fwdBtn" type="button" class="ghost-btn" disabled>↪ Redo</button>
+    <button id="diceBtn" type="button" class="ghost-btn">🎲 Shuffle look</button>
   </div>
 </header>
 
 <main class="studio">
   <section class="preview-pane" aria-label="Live cover preview">
     <div class="preview-frame">
-      <canvas id="preview" width="880" height="880"></canvas>
-      <p class="preview-hint">Click a panel to select it · drag to move the photo · scroll to zoom</p>
+      <canvas id="cv" width="880" height="880"></canvas>
+      <p class="preview-hint">Click a frame to pick it · drag to move the photo · scroll to zoom · arrow keys nudge</p>
     </div>
-    <p id="status" class="status" role="status">Loading the rooftop sample…</p>
+    <p id="note" class="status" role="status">Loading the rooftop sample…</p>
   </section>
 
   <aside class="controls" aria-label="Cover controls">
     <section class="control-block">
       <h2>1 · Photo</h2>
-      <p class="help">Your photos never leave this machine. Pick a sample, or load your own into the selected panel.</p>
-      <div id="sampleRow" class="swatch-row"></div>
-      <label class="upload-btn" for="photoFile">📷 Load your own photo
-        <input id="photoFile" type="file" accept="image/*">
+      <p class="help">Your photos never leave this machine. Pick a sample, or load your own into the picked frame.</p>
+      <div id="photoRow" class="swatch-row"></div>
+      <label class="upload-btn" for="uploadInput">📷 Load your own photo
+        <input id="uploadInput" type="file" accept="image/*">
       </label>
-      <button id="fillEverywhere" type="button" class="text-btn">Use this photo in every panel →</button>
+      <button id="spreadBtn" type="button" class="text-btn">Use this photo in every frame →</button>
       <div class="crop-row">
-        <span id="panelLabel" class="panel-label">Panel 1 of 4 · Vice Hero</span>
-        <label class="zoom-label">Zoom <span id="zoomValue">1.00×</span>
-          <input id="zoomRange" type="range" min="1" max="2.5" step="0.05" value="1">
+        <span id="slotLabel" class="panel-label">Frame 1 of 4 · Vice Hero</span>
+        <label class="zoom-label">Zoom <span id="zoomText">1.06×</span>
+          <input id="zoomSlider" type="range" min="1" max="2.5" step="0.05" value="1.06">
         </label>
-        <button id="resetCrop" type="button" class="text-btn">Reset crop</button>
+        <button id="cropReset" type="button" class="text-btn">Reset crop</button>
       </div>
     </section>
 
@@ -64,24 +64,24 @@
     <section class="control-block">
       <h2>4 · Lettering</h2>
       <label class="field">Title
-        <input id="titleInput" type="text" value="VICE COAST" maxlength="24" autocomplete="off">
+        <input id="titleField" type="text" value="VICE COAST" maxlength="24" autocomplete="off">
       </label>
       <label class="field">Subtitle
-        <input id="subtitleInput" type="text" value="a vice city story" maxlength="48" autocomplete="off">
+        <input id="subField" type="text" value="a vice city story" maxlength="48" autocomplete="off">
       </label>
       <label class="field">Seal text
-        <input id="sealInput" type="text" value="EST. 2026" maxlength="12" autocomplete="off">
+        <input id="sealField" type="text" value="EST. 2026" maxlength="12" autocomplete="off">
       </label>
-      <label class="check"><input id="grainCheck" type="checkbox" checked> Film grain</label>
-      <label class="check"><input id="vignetteCheck" type="checkbox" checked> Vignette</label>
+      <label class="check"><input id="grainToggle" type="checkbox" checked> Film grain</label>
+      <label class="check"><input id="shadeToggle" type="checkbox" checked> Vignette</label>
     </section>
 
     <section class="control-block">
       <h2>5 · Export</h2>
       <div id="sizeRow" class="swatch-row wrap"></div>
       <div class="export-row">
-        <button id="exportOne" type="button" class="primary-btn">⬇ Export this size</button>
-        <button id="exportAll" type="button" class="primary-btn alt">⬇ Export all three</button>
+        <button id="saveOneBtn" type="button" class="primary-btn">⬇ Export this size</button>
+        <button id="saveAllBtn" type="button" class="primary-btn alt">⬇ Export all three</button>
       </div>
       <p class="help">Exports are PNGs at full post size — 1080×1080, 1080×1350 and 1920×1080 — ready to share.</p>
     </section>
