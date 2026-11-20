@@ -1,66 +1,54 @@
-// Vice Coast Cover Studio v2 — the hand-in program (Node 22, stdlib only).
+// Vice Coast Cover Studio — hand-in program (v3, Node 22, stdlib only).
 //
-// It carries the finished app to the grader: app/ and screenshots/ are copied
-// from beside this file into the output directory, and dossier.json is written
-// there with the vendored make.fun library. The program runs twice and both
-// runs must produce identical bytes, so nothing here reads a clock, rolls
-// dice, or touches the network — only copies plus one deterministic build.
+// Copies app/ and screenshots/ from beside this file into the output
+// directory and writes /output/dossier.json with the vendored make.fun
+// library (vendor/makefun-app.ts, byte for byte the kit's copy).
 //
-// Why the output directory is emptied the way it is: the grader runs this
-// program as uid 65534 against an /output it owns but whose parent it cannot
-// write. Deleting /output itself would fail with EACCES and kill the whole
-// grade (that is exactly what v1 did). So the directory itself is never
-// removed — only the entries inside it are cleared, then it is created if
-// it is missing. A stale app/, screenshots/ or dossier.json can never leak
-// from one run into the next, and the run still exits 0 as nobody.
-//
-// Local check:
+// The output directory itself is NEVER removed. The grader runs this program
+// as an unprivileged user against a read-only repository and a writable
+// output directory whose parent directory cannot be written, so deleting the
+// output directory itself throws EACCES. Instead we clear only the three
+// entries this program owns inside it — app, screenshots and dossier.json —
+// and then write them fresh. Removing a child of the output directory only
+// needs write permission on the directory itself, which the grader grants.
+// Run it outside the grader with MAKEFUN_OUTPUT_DIR standing in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-// The entry lives here; the grader's output directory is /output, or
-// MAKEFUN_OUTPUT_DIR when set (local runs and the nobody test use that).
-const here = dirname(fileURLToPath(import.meta.url));
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const here = fileURLToPath(new URL('.', import.meta.url));
+const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// Gate caps from the competition (reference/gate.json): the text budget
-// shapes the dossier; the rest refuse an entry the scorer would refuse, so
-// they are checked up front instead of handing in junk.
-const CAPS = {
-  text_max_bytes: 163840,
-  screenshots: { max: 4, max_bytes: 262144 },
-  app_max_files: 993,
-  app_max_bytes: 50331648,
-  app_path_max_bytes: 1000,
-};
+// Create the output directory if it is missing, but never delete it.
+mkdirSync(out, { recursive: true });
 
-// The names main.ts itself manages inside the output directory. Anything
-// else in there is left alone — it is not ours to delete.
-const MANAGED = ['app', 'screenshots', 'dossier.json'];
-
-// Clear only the entries this program manages, never the directory itself.
-function emptyManagedEntries(dir) {
-  mkdirSync(dir, { recursive: true });
-  for (const name of readdirSync(dir)) {
-    if (MANAGED.includes(name)) {
-      rmSync(join(dir, name), { recursive: true, force: true });
-    }
-  }
+// Clear only what this program owns inside the output directory, so a
+// second run starts clean without touching the directory itself.
+for (const owned of ['app', 'screenshots', 'dossier.json']) {
+  const target = join(out, owned);
+  if (existsSync(target)) rmSync(target, { recursive: true, force: true });
 }
 
-function copyIfPresent(from, to) {
-  if (existsSync(from)) cpSync(from, to, { recursive: true });
+cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
+mkdirSync(join(out, 'screenshots'), { recursive: true });
+if (existsSync(join(here, 'screenshots'))) {
+  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 }
 
-function handIn() {
-  emptyManagedEntries(outDir);
-  copyIfPresent(join(here, 'app'), join(outDir, 'app'));
-  copyIfPresent(join(here, 'screenshots'), join(outDir, 'screenshots'));
-  writeFileSync(join(outDir, 'dossier.json'), buildDossier(outDir, CAPS));
-}
-
-handIn();
+// The scorer's own caps (reference/gate.json): only text_max_bytes shapes
+// the bytes; the others refuse an entry the scorer would refuse (more than
+// 4 screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB
+// of app files in all, or a path under app/ over 1000 bytes).
+writeFileSync(
+  join(out, 'dossier.json'),
+  buildDossier(out, {
+    text_max_bytes: 163840,
+    screenshots: { max: 4, max_bytes: 262144 },
+    app_max_files: 993,
+    app_max_bytes: 50331648,
+    app_path_max_bytes: 1000,
+  }),
+);
