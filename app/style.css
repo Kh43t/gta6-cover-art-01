@@ -1,122 +1,215 @@
-/* Vice Coast Cover Studio — a dark neon workbench. System fonts only,
-   so the app renders the same offline as it does anywhere else. */
+/* Vice Coast Cover Studio — studio chrome.
+   The cover art itself is painted on canvas (see src/cover.js); this file
+   only styles the editor around it. Dark vice-purple theme, warm accents. */
+
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; }
+
+:root {
+  --ink: #fff6e8;
+  --ink-dim: #d8c8de;
+  --bg: #150826;
+  --bg-2: #1e0b33;
+  --card: #241040;
+  --line: #4a2a68;
+  --pink: #ff2e63;
+  --orange: #ff9a3d;
+  --gold: #ffe9a8;
+  --teal: #2ad4c4;
+}
+
+html, body { margin: 0; padding: 0; }
+
 body {
-  background: #12081f;
-  color: #f5efe8;
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: radial-gradient(1200px 600px at 80% -10%, #3d1157 0%, var(--bg) 55%);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  min-height: 100vh;
 }
-.topbar {
+
+/* ------------------------------------------------------------ masthead */
+.masthead {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  padding: 14px 20px;
-  border-bottom: 2px solid #ff2e88;
-  background: linear-gradient(90deg, #1c0b2e, #2b0f3d 60%, #3d1030);
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(18, 6, 31, 0.7);
 }
-.topbar h1 {
+
+.brand { display: flex; align-items: center; gap: 14px; }
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  font-family: Impact, "Arial Black", sans-serif;
+  font-size: 24px;
+  color: #1a0518;
+  background: linear-gradient(135deg, var(--gold), var(--orange) 55%, var(--pink));
+  box-shadow: 0 4px 18px rgba(255, 46, 99, 0.45);
+}
+
+.masthead h1 {
   margin: 0;
-  font-size: 26px;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  color: #fff3f8;
-  text-shadow: 0 0 18px rgba(255, 46, 136, 0.6);
+  font-family: Impact, "Arial Black", sans-serif;
+  font-size: 30px;
+  letter-spacing: 1px;
+  line-height: 1;
 }
-.topbar h1 span { color: #ffb03d; text-shadow: 0 0 18px rgba(255, 176, 61, 0.55); }
-.tagline { margin: 2px 0 0; color: #d9c8e8; font-size: 13px; }
-.top-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.app {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-  padding: 18px 20px 28px;
+
+.tagline { margin: 4px 0 0; color: var(--ink-dim); font-size: 14px; }
+
+.history { display: flex; gap: 8px; }
+
+/* -------------------------------------------------------------- buttons */
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) { border-color: var(--pink); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--pink), var(--orange));
+  border: none;
+  color: #fff;
+}
+
+.btn.export-btn { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------ workbench */
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  gap: 24px;
+  padding: 24px 28px;
   max-width: 1280px;
   margin: 0 auto;
 }
-.controls {
-  width: 300px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+
+.stage-col { min-width: 0; }
+
+.canvas-frame {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #12061f;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
-.group {
-  background: #1e0f31;
-  border: 1px solid #4a2566;
-  border-radius: 12px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.group h2 {
-  margin: 0;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  color: #ffb03d;
-}
-label { display: flex; flex-direction: column; gap: 5px; font-weight: 600; font-size: 13px; }
-label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
-select, input[type=text] {
-  font: inherit;
-  color: #f5efe8;
-  background: #2b1745;
-  border: 1px solid #6b3a96;
-  border-radius: 7px;
-  padding: 8px 10px;
-}
-select:focus, input[type=text]:focus { outline: 2px solid #ff2e88; outline-offset: 1px; }
-input[type=range] { width: 100%; accent-color: #ff2e88; }
-.range-row { display: flex; align-items: center; gap: 10px; }
-.range-row input { flex: 1; }
-.range-row output { min-width: 48px; text-align: right; color: #ffb03d; font-weight: 700; }
-button {
-  font: inherit;
-  font-weight: 700;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: 8px;
-  background: #ff2e88;
-  color: #fff;
-  cursor: pointer;
-}
-button:hover:not(:disabled) { background: #ff4d9d; }
-button:disabled { opacity: 0.4; cursor: default; }
-button#resetPanels { background: #3a2358; }
-.exports { display: flex; flex-direction: column; gap: 8px; }
-.exports button { background: #ff7a3d; color: #1c0b2e; }
-.exports button:hover { background: #ffa25e; }
-.hint { margin: 0; font-size: 12.5px; color: #b9a6cc; font-weight: 400; }
-.panel-label { margin: 0; font-weight: 700; color: #19c8e8; }
-.stage { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-#stage {
-  width: min(100%, 560px);
+
+#cover-canvas {
+  display: block;
+  width: 100%;
   height: auto;
-  aspect-ratio: 1 / 1;
-  border-radius: 10px;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.6), 0 0 0 1px #4a2566;
   cursor: grab;
   touch-action: none;
-  background: #0d0a12;
 }
-#stage:active { cursor: grabbing; }
-#status { margin: 0; color: #d9c8e8; font-size: 13.5px; text-align: center; }
+
+#cover-canvas:focus { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.stage-hint {
+  color: var(--ink-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 12px 2px 0;
+}
+
+.export-block { margin-top: 22px; }
+.export-block h2, .card h2 { font-size: 16px; margin: 0 0 12px; letter-spacing: 0.4px; }
+.export-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.fineprint { color: var(--ink-dim); font-size: 13px; line-height: 1.5; }
+.fineprint code { color: var(--gold); }
+
+/* ------------------------------------------------------------ side panel */
+.panel-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+.field { display: block; margin-bottom: 12px; font-size: 13px; color: var(--ink-dim); }
+.field:last-child { margin-bottom: 0; }
+
+.field select,
+.field input[type="text"],
+.field input[type="number"] {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.field input[type="range"] { display: block; width: 100%; margin-top: 6px; accent-color: var(--pink); }
+
+.readout { color: var(--gold); font-size: 13px; font-weight: 600; }
+
+/* ------------------------------------------------------------ photo tray */
+.tray {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tray-card {
+  appearance: none;
+  border: 2px solid transparent;
+  background: var(--bg-2);
+  border-radius: 10px;
+  padding: 0 0 6px;
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.tray-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.tray-card span { display: block; font-size: 12px; padding: 6px 4px 0; }
+.tray-card.picked { border-color: var(--pink); box-shadow: 0 0 0 2px rgba(255, 46, 99, 0.35); }
+
+.upload-btn { display: inline-block; text-align: center; }
+
+/* -------------------------------------------------------------- footer */
+.foot {
+  padding: 18px 28px 28px;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------- shot mode
+   ?shot=cover renders a bare cover for screenshots: hide all chrome. */
+body.shot-cover { background: #12061f; }
+body.shot-cover .masthead,
+body.shot-cover .panel-col,
+body.shot-cover .stage-hint,
+body.shot-cover .export-block,
+body.shot-cover .foot { display: none; }
+body.shot-cover .workbench { display: block; padding: 0; margin: 0; max-width: none; }
+body.shot-cover .canvas-frame { border: none; border-radius: 0; box-shadow: none; }
+body.shot-cover #cover-canvas { cursor: default; }
+
+/* ------------------------------------------------------------ narrow */
 @media (max-width: 860px) {
-  .app { flex-direction: column; }
-  .controls { width: 100%; }
-  .topbar { flex-direction: column; align-items: flex-start; }
-}
-/* Screenshot scenes: the cover shot hides every control so the canvas
-   fills the frame; the editor shot keeps the studio visible. */
-body.shot-cover .topbar, body.shot-cover .controls, body.shot-cover #status { display: none; }
-body.shot-cover .app { padding: 0; max-width: none; }
-body.shot-cover .stage { width: 100%; }
-body.shot-cover #stage {
-  width: 100vw;
-  height: 100vh;
-  border-radius: 0;
-  box-shadow: none;
+  .workbench { grid-template-columns: 1fr; padding: 16px; }
+  .masthead { flex-wrap: wrap; padding: 14px 16px; }
+  .masthead h1 { font-size: 24px; }
 }

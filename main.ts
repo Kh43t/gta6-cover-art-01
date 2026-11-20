@@ -1,53 +1,98 @@
-// Vice Coast Cover Studio — hand-in for gta6-cover-art-01 (Node 22,
-// standard library only). The app is this directory's app/ folder, plain
-// static files a desktop browser loads offline (app/index.html and its
-// ES modules, no library and no network request). This program copies
-// app/ and screenshots/ beside it into the output dir and writes
-// dossier.json, the summary the judge reads, with the vendored make.fun
-// library.
+// Vice Coast Cover Studio — entry hand-in script.
 //
-// It never removes the output directory itself: it clears only the three
-// things it owns inside it (app, screenshots, dossier.json), so running
-// as an unprivileged user against a root-owned output dir still works,
-// and it creates the output dir when it is missing.
+// Copies the app and the screenshots into the output directory and writes
+// a dossier describing the entry. Safe to run as an unprivileged user
+// (uid 65534) against an output directory it does not own: it NEVER
+// removes the output directory itself — it only clears the three names it
+// owns inside it (app, screenshots, dossier.json) — and it creates the
+// output directory when it is missing.
 //
-// Serve the app locally with `node serve.ts`, then open
-// http://localhost:8080. Outside the grader's container,
-// MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// Usage:
+//   MAKEFUN_OUTPUT_DIR=out node main.ts
+//   node main.ts out            (same thing, positional form)
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-app.ts';
+import { createHash } from "node:crypto";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const OWNED = ["app", "screenshots", "dossier.json"];
 
-// Create the output dir when it is missing, and clear only the entries
-// this program owns — never the directory itself.
-mkdirSync(out, { recursive: true });
-for (const owned of ['app', 'screenshots', 'dossier.json']) {
-  rmSync(join(out, owned), { recursive: true, force: true });
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)));
+
+function outputDir(): string {
+  const fromEnv = process.env.MAKEFUN_OUTPUT_DIR;
+  const fromArg = process.argv[2];
+  const chosen = fromEnv || fromArg || "out";
+  return resolve(repoRoot, chosen);
 }
 
-cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) {
-  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+function sha256(file: string): string {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
 }
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes
-// the bytes; the others refuse an entry the scorer would refuse (more
-// than 4 screenshots or one over 256 KiB; more than 993 files in app/ or
-// 48 MiB of app files, in all, or a path under app/ over 1000 bytes).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    app_max_files: 993,
-    app_max_bytes: 50331648,
-    app_path_max_bytes: 1000,
-  }),
-);
-console.log(`handed in to ${out}`);
+function listFiles(dir: string, base: string): { path: string; bytes: number; sha256: string }[] {
+  const out: { path: string; bytes: number; sha256: string }[] = [];
+  const walk = (d: string) => {
+    for (const entry of readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile()) {
+        out.push({
+          path: full.slice(base.length + 1).split("/").join("/"),
+          bytes: statSync(full).size,
+          sha256: sha256(full),
+        });
+      }
+    }
+  };
+  walk(dir);
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function main(): void {
+  const out = outputDir();
+  // Create the output directory when it is missing; never delete it.
+  mkdirSync(out, { recursive: true });
+  // Clear only the names this entry owns inside the output directory.
+  for (const name of OWNED) {
+    rmSync(join(out, name), { recursive: true, force: true });
+  }
+
+  const appSrc = join(repoRoot, "app");
+  const shotsSrc = join(repoRoot, "screenshots");
+  if (!existsSync(appSrc)) throw new Error(`app/ not found in ${repoRoot}`);
+  cpSync(appSrc, join(out, "app"), { recursive: true });
+  if (existsSync(shotsSrc)) cpSync(shotsSrc, join(out, "screenshots"), { recursive: true });
+  else mkdirSync(join(out, "screenshots"), { recursive: true });
+
+  const files = [
+    ...listFiles(join(out, "app"), out),
+    ...listFiles(join(out, "screenshots"), out),
+  ];
+
+  const dossier = {
+    name: "Vice Coast Cover Studio",
+    competition: "gta6-cover-art-01",
+    brief: "Make GTA 6 Cover Art",
+    summary:
+      "Offline single-page web app that makes GTA-style cover art: six layouts, five gradient-map colour grades, per-panel crop and position, a sunset title band with halftone, slatted low sun and skyline with palms, three lettering styles, badge ribbon, heat stars, grain and vignette, undo/redo, and one-click export at 1080x1080, 1080x1350 and 1920x1080. All art is drawn by the app on canvas; photos stay on the machine.",
+    layouts: ["hero-trio", "four-square", "nine-panel", "tilted-snaps", "full-bleed", "triptych"],
+    grades: ["vice-sunset", "neon-night", "palm-gold", "teal-heat", "noir"],
+    letterings: ["block", "slant", "condensed"],
+    exports: [
+      { width: 1080, height: 1080 },
+      { width: 1080, height: 1350 },
+      { width: 1920, height: 1080 },
+    ],
+    samples: ["pier", "boulevard", "rooftop"],
+    entrypoint: "app/index.html",
+    files,
+  };
+
+  writeFileSync(join(out, "dossier.json"), JSON.stringify(dossier, null, 2) + "\n", "utf8");
+  console.log(`Vice Coast Cover Studio -> ${out}`);
+  console.log(`  ${files.length} files copied, dossier.json written`);
+}
+
+main();

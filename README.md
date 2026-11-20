@@ -16,6 +16,12 @@ Then open <http://localhost:8080>. To hand the entry in:
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
+`main.ts` copies `app/` and `screenshots/` into the output directory and
+writes `dossier.json`. It never removes the output directory itself — it
+only clears the names it owns inside it (`app`, `screenshots`,
+`dossier.json`) — so it also runs as an unprivileged user against an
+output directory owned by someone else.
+
 ## Layouts
 
 Six layouts, switched from the **Layout** menu:
@@ -48,65 +54,66 @@ while a little of the photo's own colour is kept so faces stay readable.
 - **Title** — the big words on the sunset band (max 30 characters).
 - **Subtitle** — a smaller line under the title.
 - **Badge ribbon** — the angled ribbon in the top-left corner.
-- **Heat stars** — 0–5 stars under the sun.
-- **Lettering** — three styles: Vice Block (heavy slab capitals, pink on
-  dark), Neon Script (glowing rounded letters, cyan on night), Noir
-  Condensed (tall narrow capitals, bone white).
+- **Lettering** — three styles: Vice Block (heavy upright capitals),
+  Sunset Slant (leaning italics with a hot-pink glow), Noir Condensed
+  (tall narrow capitals).
+- **Heat stars** — 0–5 sparkle stars at the top-right of the title band.
 
-## The title band
+## The sunset title band
 
-Every cover ends with the same sunset band: a purple-to-orange gradient
-with a halftone dot field, a city skyline with palms along its top edge,
-and a low sun cut by horizontal slats with rays fanning behind it. Film
-grain and a vignette finish the cover; both can be switched off.
+The bottom band is drawn, not an image: a dusk gradient sky, a slatted
+low sun with rays, halftone dots, a city skyline with palm trees, and the
+title on top. Grain and a vignette finish the whole cover.
 
-## Working a panel
+## Crop and position
 
-Click a panel to select it — the panel controls follow the selection.
+Click a panel to select it, then:
 
-- **Photo** — pick one of the three bundled samples (Pier at Dusk,
-  Boulevard, Rooftop) or upload your own photo into the panel. Uploads
-  use a local object URL; nothing is sent anywhere.
-- **Drag** — drag the photo inside its panel to reposition it.
-- **Scroll** — scroll over the canvas to zoom the selected panel (1×–4×).
-- **Sliders** — Zoom, Move left/right, Move up/down for fine control.
-- **Arrow keys** — nudge the selected panel (Shift for bigger steps).
+- **Drag** the photo inside the panel to move it.
+- **Scroll** over a panel to zoom it.
+- **Sliders** — zoom, move left/right, move up/down — for the selected panel.
+- **Arrow keys** nudge the selected panel; `+` / `−` zoom it.
+- **Undo / Redo** buttons (or Ctrl+Z / Ctrl+Y) step through every change.
 
-**Undo / Redo** cover every change (layout, grade, words, panel moves,
-uploads) — one undo step per edit, via the buttons or Ctrl+Z / Ctrl+Y.
+Photos are cover-fit with a top anchor, so faces stay in frame when a
+panel is taller than the photo.
+
+## Photos
+
+Three sample shots ship with the app: **Starter Pier**, **Boulevard**,
+and **Rooftop** (a dusk rooftop shot). Tap one to place it in the selected
+panel. **Add your own photo** loads an image from your machine as an
+object URL — it is never uploaded anywhere.
 
 ## Export
 
-One click per size, from the **Finish** section:
+One click per size, or **Export all three**:
 
 - Square 1080 × 1080
 - Portrait 1080 × 1350
 - Wide 1920 × 1080
 
-Files are PNGs named after the title, e.g.
-`vice-coast-1080x1080.png`. The title is slugged (lowercase, spaces to
-dashes, accents stripped); an empty title falls back to
-`vice-coast-cover`.
-
-## Samples
-
-- `app/samples/pier.jpg` — Pier at Dusk (kit starter sample).
-- `app/samples/boulevard.jpg` — Boulevard (kit starter sample).
-- `app/samples/rooftop.jpg` — Rooftop, a dusk rooftop shot made for this
-  entry.
+Exports are PNG files named after the title, for example
+`vice-coast-1080x1080.png`.
 
 ## Files
 
-- `app/index.html` — the page and controls.
-- `app/style.css` — the dark neon workbench styling.
-- `app/src/studio.js` — state, history, picking, upload, export.
-- `app/src/cover.js` — the canvas renderer (layouts, grade LUT, title
-  band, sun, skyline, grain, vignette).
-- `app/src/presets.js` — layouts, grades, lettering, samples, export sizes.
-- `app/src/shots.js` — fixed scenes for screenshots (`?shot=cover` /
-  `?shot=editor`).
-- `main.ts` — copies `app/` and `screenshots/` to the output dir and
-  writes `dossier.json`.
-- `serve.ts` — the local dev server (port 8080).
-- `shots.json` — the four screenshot scenes.
-- `screenshots/` — 1-cover, 2-editor, 3-cover, 4-cover.
+```text
+app/index.html        editor shell
+app/style.css         editor chrome styling
+app/src/presets.js    layouts, grades, lettering, export sizes
+app/src/cover.js      canvas renderer (panels, grades, title band)
+app/src/shots.js      sample shots, image loading, URL params
+app/src/studio.js     state, history, controls, crop, export
+app/samples/          pier.jpg, boulevard.jpg, rooftop.jpg
+main.ts               hand-in script (copies app + screenshots, dossier)
+serve.ts              dev server on port 8080
+shots.json            screenshot manifest (4 shots)
+screenshots/          1-cover.jpg, 2-editor.jpg, 3-cover.jpg, 4-cover.jpg
+```
+
+## Screenshot mode
+
+`shots.json` lists four deep links. `?shot=cover` renders a bare cover
+with no editor chrome (for cover screenshots); `?shot=editor` opens the
+editor with the given photo, caption, layout, grade and lettering.

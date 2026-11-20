@@ -1,94 +1,105 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vice Coast Cover Studio — Make GTA 6 Cover Art</title>
-<link rel="stylesheet" href="./style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ff2e63'/%3E%3Ctext x='16' y='23' font-family='Arial Black' font-size='15' font-weight='900' text-anchor='middle' fill='%23fff6e8'%3EVC%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="topbar">
-  <div>
-    <h1>VICE COAST <span>COVER STUDIO</span></h1>
-    <p class="tagline">GTA-style cover art, made offline in your browser. Photos never leave this machine.</p>
+<header class="masthead">
+  <div class="brand">
+    <span class="brand-mark">VC</span>
+    <div>
+      <h1>Vice Coast Cover Studio</h1>
+      <p class="tagline">Make GTA-style cover art — offline, on your machine.</p>
+    </div>
   </div>
-  <div class="top-actions">
-    <button id="undo" type="button" disabled>Undo</button>
-    <button id="redo" type="button" disabled>Redo</button>
+  <div class="history">
+    <button id="undo-btn" type="button" class="btn" disabled>Undo</button>
+    <button id="redo-btn" type="button" class="btn" disabled>Redo</button>
   </div>
 </header>
-<main class="app">
-  <section class="controls" aria-label="Cover controls">
-    <div class="group">
-      <h2>Look</h2>
-      <label>Layout
-        <select id="layout"></select>
-      </label>
-      <label>Colour grade
-        <select id="grade"></select>
-      </label>
-      <label>Lettering
-        <select id="lettering"></select>
-      </label>
+
+<main class="workbench">
+  <section class="stage-col">
+    <div class="canvas-frame">
+      <canvas id="cover-canvas" tabindex="0"
+        aria-label="Cover preview. Click a panel to select it, drag to move the photo, scroll to zoom."></canvas>
     </div>
-    <div class="group">
+    <p class="stage-hint">Click a panel to select it · drag to move the photo · scroll to zoom ·
+      arrow keys nudge · + / − zoom · Ctrl+Z undo</p>
+    <div class="export-block">
+      <h2>Export</h2>
+      <div id="export-row" class="export-row"></div>
+      <p class="fineprint">Exports are PNG files named after your title, for example
+        <code>vice-coast-1080x1080.png</code>.</p>
+    </div>
+  </section>
+
+  <aside class="panel-col">
+    <section class="card">
+      <h2>Layout &amp; colour</h2>
+      <label class="field">Layout
+        <select id="layout-pick"></select>
+      </label>
+      <label class="field">Colour grade
+        <select id="grade-pick"></select>
+      </label>
+      <label class="field">Lettering
+        <select id="lettering-pick"></select>
+      </label>
+      <label class="field">Heat stars (0–5)
+        <input id="stars-input" type="number" min="0" max="5" step="1" value="4">
+      </label>
+    </section>
+
+    <section class="card">
       <h2>Words</h2>
-      <label>Title
-        <input id="title" type="text" maxlength="30" value="VICE COAST">
+      <label class="field">Title (max 30 characters)
+        <input id="title-input" type="text" maxlength="30" value="VICE COAST">
       </label>
-      <label>Subtitle
-        <input id="subtitle" type="text" maxlength="48" value="A STORY IN THREE ACTS">
+      <label class="field">Subtitle (max 60 characters)
+        <input id="subtitle-input" type="text" maxlength="60" value="WELCOME BACK TO LEONIDA">
       </label>
-      <label>Badge ribbon
-        <input id="badge" type="text" maxlength="20" value="VICE CITY">
+      <label class="field">Badge ribbon (max 24 characters)
+        <input id="ribbon-input" type="text" maxlength="24" value="VICE CITY">
       </label>
-      <label>Heat stars
-        <span class="range-row">
-          <input id="stars" type="range" min="0" max="5" step="1" value="4">
-          <output id="starsOut">4 / 5</output>
-        </span>
-      </label>
-    </div>
-    <div class="group">
+    </section>
+
+    <section class="card">
       <h2>Selected panel</h2>
-      <p id="panelLabel" class="panel-label">Panel 1 of 4</p>
-      <label>Photo
-        <select id="panelPhoto"></select>
+      <p id="panel-readout" class="readout">Panel 1 of 4</p>
+      <label class="field">Zoom
+        <input id="zoom-slider" type="range" min="0.5" max="4" step="0.01" value="1">
+        <span id="zoom-readout" class="readout">100%</span>
       </label>
-      <button id="upload" type="button">Upload photo into this panel</button>
-      <input id="fileInput" type="file" accept="image/*" hidden>
-      <label>Zoom
-        <span class="range-row">
-          <input id="zoom" type="range" min="1" max="4" step="0.05" value="1">
-          <output id="zoomOut">1.00x</output>
-        </span>
+      <label class="field">Move left / right
+        <input id="x-slider" type="range" min="-1" max="1" step="0.01" value="0">
       </label>
-      <label>Move left / right
-        <input id="panX" type="range" min="-0.6" max="0.6" step="0.01" value="0">
+      <label class="field">Move up / down
+        <input id="y-slider" type="range" min="-1" max="1" step="0.01" value="0">
       </label>
-      <label>Move up / down
-        <input id="panY" type="range" min="-0.6" max="0.6" step="0.01" value="0">
+    </section>
+
+    <section class="card">
+      <h2>Photos</h2>
+      <p class="fineprint">Tap a photo to place it in the selected panel.
+        Your own photos never leave this machine.</p>
+      <div id="photo-tray" class="tray"></div>
+      <label class="btn upload-btn">Add your own photo
+        <input id="upload-input" type="file" accept="image/*" hidden>
       </label>
-      <p class="hint">Click a panel to pick it. Drag to move the photo, scroll to zoom, arrow keys nudge it.</p>
-      <button id="resetPanels" type="button">Reset all panels</button>
-    </div>
-    <div class="group">
-      <h2>Finish</h2>
-      <label class="check"><input id="grain" type="checkbox" checked> Film grain</label>
-      <label class="check"><input id="vignette" type="checkbox" checked> Vignette</label>
-      <div class="exports">
-        <button id="export-square" type="button">Export 1080 x 1080</button>
-        <button id="export-portrait" type="button">Export 1080 x 1350</button>
-        <button id="export-wide" type="button">Export 1920 x 1080</button>
-      </div>
-      <p class="hint">Export files are named after your title, e.g. vice-coast-1080x1080.png.</p>
-    </div>
-  </section>
-  <section class="stage" aria-label="Cover preview">
-    <canvas id="stage" width="900" height="900" aria-label="The cover preview"></canvas>
-    <p id="status" role="status">Pick a layout, grade and photos — the cover updates live.</p>
-  </section>
+    </section>
+  </aside>
 </main>
-<script type="module" src="./src/studio.js"></script>
+
+<footer class="foot">
+  <p>Vice Coast Cover Studio · every visual is drawn by this app on canvas ·
+    no network at runtime · photos stay on your machine.</p>
+</footer>
+
+<script type="module" src="src/studio.js"></script>
 </body>
 </html>
