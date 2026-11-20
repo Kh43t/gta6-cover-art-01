@@ -1,1 +1,26 @@
-[{"h":1080,"name":"1-cover.jpg","query":"?shot=cover&photo=pier&caption=Vice%20Coast&layout=hero-trio&grade=vice-sunset","w":1080},{"h":720,"name":"2-editor.jpg","query":"?shot=editor&photo=boulevard&caption=Boulevard%20Queen&layout=four-square&grade=teal-heat","w":1280},{"h":1080,"name":"3-cover.jpg","query":"?shot=cover&photo=rooftop&caption=Rooftop%20Royale&layout=nine-panel&grade=neon-night","w":1080},{"h":1080,"name":"4-cover.jpg","query":"?shot=cover&photo=boulevard&caption=Palm%20Gold%20Run&layout=triptych&grade=palm-gold&lettering=condensed","w":1080}]
+[
+  {
+    "name": "1-cover.jpg",
+    "w": 1080,
+    "h": 1080,
+    "query": "?shot=cover&photo=pier&caption=Vice%20Coast&layout=hero-trio&grade=vice-sunset"
+  },
+  {
+    "name": "2-editor.jpg",
+    "w": 1280,
+    "h": 720,
+    "query": "?shot=editor&photo=boulevard&caption=Boulevard%20Queen&layout=four-square&grade=teal-heat"
+  },
+  {
+    "name": "3-cover.jpg",
+    "w": 1080,
+    "h": 1080,
+    "query": "?shot=cover&photo=rooftop&caption=Rooftop%20Royale&layout=nine-panel&grade=neon-night"
+  },
+  {
+    "name": "4-cover.jpg",
+    "w": 1080,
+    "h": 1080,
+    "query": "?shot=cover&photo=boulevard&caption=Palm%20Gold%20Run&layout=triptych&grade=palm-gold&lettering=noir-condensed"
+  }
+]

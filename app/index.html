@@ -1,104 +1,91 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vice Coast Cover Studio — Make GTA 6 Cover Art</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ff2e63'/%3E%3Ctext x='16' y='23' font-family='Arial Black' font-size='15' font-weight='900' text-anchor='middle' fill='%23fff6e8'%3EVC%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="masthead">
+<header class="topbar">
   <div class="brand">
     <span class="brand-mark">VC</span>
     <div>
       <h1>Vice Coast Cover Studio</h1>
-      <p class="tagline">Make GTA-style cover art — offline, on your machine.</p>
+      <p>Make GTA 6 cover art — offline, on canvas, photos stay on your machine.</p>
     </div>
   </div>
-  <div class="history">
-    <button id="undo-btn" type="button" class="btn" disabled>Undo</button>
-    <button id="redo-btn" type="button" class="btn" disabled>Redo</button>
+  <div class="top-actions">
+    <button id="undoBtn" type="button" title="Undo (Ctrl+Z)">↩ Undo</button>
+    <button id="redoBtn" type="button" title="Redo (Ctrl+Y)">↪ Redo</button>
+    <button id="exportAll" type="button" class="primary">Export all three</button>
   </div>
 </header>
 
-<main class="workbench">
-  <section class="stage-col">
-    <div class="canvas-frame">
-      <canvas id="cover-canvas" tabindex="0"
-        aria-label="Cover preview. Click a panel to select it, drag to move the photo, scroll to zoom."></canvas>
-    </div>
-    <p class="stage-hint">Click a panel to select it · drag to move the photo · scroll to zoom ·
-      arrow keys nudge · + / − zoom · Ctrl+Z undo</p>
-    <div class="export-block">
-      <h2>Export</h2>
-      <div id="export-row" class="export-row"></div>
-      <p class="fineprint">Exports are PNG files named after your title, for example
-        <code>vice-coast-1080x1080.png</code>.</p>
+<main class="workspace">
+  <section class="stage">
+    <canvas id="coverCanvas" width="1080" height="1080" aria-label="Cover preview. Click a panel to select it, drag to move the photo, scroll to zoom."></canvas>
+    <p class="hint">Click a panel to select it · drag to move the photo · scroll to zoom · arrow keys nudge · + / − zoom</p>
+    <div class="export-row">
+      <button id="exportSquare" type="button">Square · 1080 × 1080</button>
+      <button id="exportPortrait" type="button">Portrait · 1080 × 1350</button>
+      <button id="exportWide" type="button">Wide · 1920 × 1080</button>
     </div>
   </section>
 
-  <aside class="panel-col">
-    <section class="card">
-      <h2>Layout &amp; colour</h2>
-      <label class="field">Layout
-        <select id="layout-pick"></select>
+  <aside class="panel">
+    <section class="group">
+      <h2>Look</h2>
+      <label>Layout
+        <select id="layoutSelect"></select>
       </label>
-      <label class="field">Colour grade
-        <select id="grade-pick"></select>
+      <label>Colour grade
+        <select id="gradeSelect"></select>
       </label>
-      <label class="field">Lettering
-        <select id="lettering-pick"></select>
-      </label>
-      <label class="field">Heat stars (0–5)
-        <input id="stars-input" type="number" min="0" max="5" step="1" value="4">
+      <label>Lettering
+        <select id="letteringSelect"></select>
       </label>
     </section>
 
-    <section class="card">
+    <section class="group">
       <h2>Words</h2>
-      <label class="field">Title (max 30 characters)
-        <input id="title-input" type="text" maxlength="30" value="VICE COAST">
+      <label>Title (max 30)
+        <input id="titleInput" type="text" maxlength="30" value="VICE COAST">
       </label>
-      <label class="field">Subtitle (max 60 characters)
-        <input id="subtitle-input" type="text" maxlength="60" value="WELCOME BACK TO LEONIDA">
+      <label>Subtitle
+        <input id="subtitleInput" type="text" value="SUNSET BOULEVARD • EST. 1986">
       </label>
-      <label class="field">Badge ribbon (max 24 characters)
-        <input id="ribbon-input" type="text" maxlength="24" value="VICE CITY">
+      <label>Badge ribbon
+        <input id="ribbonInput" type="text" value="VICE CITY">
       </label>
-    </section>
-
-    <section class="card">
-      <h2>Selected panel</h2>
-      <p id="panel-readout" class="readout">Panel 1 of 4</p>
-      <label class="field">Zoom
-        <input id="zoom-slider" type="range" min="0.5" max="4" step="0.01" value="1">
-        <span id="zoom-readout" class="readout">100%</span>
-      </label>
-      <label class="field">Move left / right
-        <input id="x-slider" type="range" min="-1" max="1" step="0.01" value="0">
-      </label>
-      <label class="field">Move up / down
-        <input id="y-slider" type="range" min="-1" max="1" step="0.01" value="0">
+      <label>Heat stars — <span id="starsValue">4 / 5</span>
+        <input id="starsInput" type="range" min="0" max="5" step="1" value="4">
       </label>
     </section>
 
-    <section class="card">
+    <section class="group">
+      <h2>Crop <span id="panelLabel" class="panel-label"></span></h2>
+      <label>Zoom — <span id="zoomValue">1.00×</span>
+        <input id="zoomRange" type="range" min="1" max="4" step="0.01" value="1">
+      </label>
+      <label>Move left / right — <span id="oxValue">0.00</span>
+        <input id="oxRange" type="range" min="-1" max="1" step="0.01" value="0">
+      </label>
+      <label>Move up / down — <span id="oyValue">0.00</span>
+        <input id="oyRange" type="range" min="-1" max="1" step="0.01" value="0">
+      </label>
+    </section>
+
+    <section class="group">
       <h2>Photos</h2>
-      <p class="fineprint">Tap a photo to place it in the selected panel.
-        Your own photos never leave this machine.</p>
-      <div id="photo-tray" class="tray"></div>
-      <label class="btn upload-btn">Add your own photo
-        <input id="upload-input" type="file" accept="image/*" hidden>
-      </label>
+      <div id="sampleStrip" class="samples"></div>
+      <button id="addPhotoBtn" type="button">Add your own photo…</button>
+      <input id="addPhotoInput" type="file" accept="image/*" hidden>
+      <p class="fineprint">Your photo is loaded as an object URL and never leaves this page.</p>
     </section>
   </aside>
 </main>
-
-<footer class="foot">
-  <p>Vice Coast Cover Studio · every visual is drawn by this app on canvas ·
-    no network at runtime · photos stay on your machine.</p>
-</footer>
 
 <script type="module" src="src/studio.js"></script>
 </body>

@@ -1,18 +1,18 @@
-// Vice Coast Cover Studio — local dev server.
-//
-// Serves the app/ folder over plain HTTP on port 8080 so the editor can be
-// opened in a browser while building. No build step, no dependencies.
-// Serves only files inside app/ and refuses path traversal.
+// Vice Coast Cover Studio — dev server (v7).
+// Serves the entry locally for development. No build step, no network
+// at runtime beyond localhost.
 //
 // Usage:
-//   node serve.ts            (or: bun serve.ts)
+//   node serve.ts            (listens on http://localhost:8080)
 //   PORT=9000 node serve.ts
-// Then open http://localhost:8080
 
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { extname, join, resolve } from "node:path";
+import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT || 8080);
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -27,27 +27,33 @@ const TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-const root = resolve(fileURLToPath(new URL("./app", import.meta.url)));
-const port = Number.parseInt(process.env.PORT || "8080", 10) || 8080;
-
 const server = createServer((req, res) => {
-  const raw = decodeURIComponent((req.url || "/").split("?")[0]);
-  const rel = raw === "/" ? "index.html" : raw.replace(/^\/+/, "");
-  const file = resolve(join(root, rel));
-  if (!file.startsWith(root + "/") && file !== root) {
+  const url = new URL(req.url || "/", "http://localhost");
+  let rel = decodeURIComponent(url.pathname);
+  // The editor lives under /app/; send the bare root there so the
+  // page's relative asset paths (style.css, src/…) resolve.
+  if (rel === "/") {
+    res.writeHead(302, { location: "/app/" });
+    res.end();
+    return;
+  }
+  if (rel === "/app" || rel === "/app/") rel = "/app/index.html";
+  const full = resolve(join(ROOT, normalize(rel)));
+  // Stay inside the repo: reject anything that escapes the root.
+  if (!full.startsWith(ROOT + "/") && full !== ROOT) {
     res.writeHead(403, { "content-type": "text/plain" });
     res.end("forbidden\n");
     return;
   }
-  if (!existsSync(file) || !statSync(file).isFile()) {
+  if (!existsSync(full) || !statSync(full).isFile()) {
     res.writeHead(404, { "content-type": "text/plain" });
     res.end("not found\n");
     return;
   }
-  res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream" });
-  createReadStream(file).pipe(res);
+  res.writeHead(200, { "content-type": TYPES[extname(full)] || "application/octet-stream" });
+  createReadStream(full).pipe(res);
 });
 
-server.listen(port, () => {
-  console.log(`Vice Coast Cover Studio dev server: http://localhost:${port}`);
+server.listen(PORT, () => {
+  console.log(`Vice Coast Cover Studio at http://localhost:${PORT}`);
 });
